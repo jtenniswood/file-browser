@@ -1,7 +1,6 @@
 /*
  * @LastEditors: zhanghengxin ezreal.zhang@icewhale.org
  * @LastEditTime: 2023/1/3 下午8:51
- * @FilePath: /CasaOS-UI/message_bus.build.js
  * @Description:
  *
  * Copyright (c) 2022 by IceWhale, All Rights Reserved.
@@ -9,7 +8,7 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
-const events = require('./src/events/message_bus.js')
+const events = require('../../src/events/message_bus.js')
 
 const outPath = './build/sysroot/var/lib/casaos/'
 const outName = 'ui-message-bus.json'
@@ -54,7 +53,7 @@ fs.mkdir(registerShellPath, { recursive: true }, (err) => {
 	if (err) {
 		console.log(err)
 	} else {
-		fs.copyFile('./register-ui-events.sh', path.join(registerShellPath, 'register-ui-events.sh'), (err) => {
+		fs.copyFile(path.join(__dirname, 'register-ui-events.sh'), path.join(registerShellPath, 'register-ui-events.sh'), (err) => {
 			if (err) {
 				console.log(err)
 			} else {

@@ -78,8 +78,8 @@ export default antfu(
 		},
 	},
 	{
-		name: 'casaos/root-scripts',
-		files: ['message_bus.build.js', 'mock/**'],
+		name: 'casaos/build-and-mock-scripts',
+		files: ['dev/casaos/message_bus.build.js', 'mock/**'],
 		rules: {
 			// Build and mock-server scripts talk through the console by design.
 			'no-console': 'off',
