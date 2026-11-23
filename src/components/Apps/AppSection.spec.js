@@ -1,0 +1,1111 @@
+// @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { forgetVirtualMachines, hasVirtualMachines, listVirtualMachines } from '@/components/VirtualMachines/entry'
+import { forgetFleet, hasFleet } from '@/components/Fleet/entry'
+import { hasLogs } from '@/components/Logs/entry'
+import AppSection from '@/components/Apps/AppSection.vue'
+import GitAppModal from '@/components/Apps/GitAppModal.vue'
+
+// The section pulls in the app panel, which imports lottie-web: it paints into a
+// canvas the moment it is imported and happy-dom has no 2d context, so the import
+// itself throws. Nothing here renders a template.
+vi.mock('lottie-web-vue', () => ({ default: { name: 'lottie-animation', template: '<div/>' } }))
+
+// the probe is whatever each test says it answers; the card without its icon,
+// which only the bundler can require
+vi.mock('@/components/VirtualMachines/entry', async importOriginal => ({
+	...await importOriginal(),
+	hasVirtualMachines: vi.fn(),
+	forgetVirtualMachines: vi.fn(),
+	listVirtualMachines: vi.fn(),
+	vmApplication: () => ({ name: 'Virtual Machines' }),
+}))
+vi.mock('@/components/Fleet/entry', async importOriginal => ({
+	...await importOriginal(),
+	hasFleet: vi.fn(() => Promise.resolve(false)),
+	forgetFleet: vi.fn(),
+	fleetApplication: () => ({ name: 'Fleet' }),
+}))
+vi.mock('@/components/Logs/entry', async importOriginal => ({
+	...await importOriginal(),
+	hasLogs: vi.fn(() => Promise.resolve(false)),
+	logsApplication: () => ({ name: 'logs' }),
+}))
+
+// The grid, not the card, is what has to be read again after an update: the app that
+// was updated is a different app now. Only app:updated says an update applied -- a
+// compose update carries no image information at all, and docker:image:updated says
+// what a pull found rather than what ended up installed.
+describe('app section git entry', () => {
+	it('opens the git dialog, which only its own buttons close', () => {
+		const open = vi.fn()
+		AppSection.methods.showGitApp.call({ $buefy: { modal: { open } } })
+
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].component).toBe(GitAppModal)
+		// its Cancel deletes an app registered and never deployed; escape would not
+		expect(open.mock.calls[0][0].canCancel).toEqual([])
+	})
+})
+
+describe('app section opening a git app', () => {
+	function section(myComposeApp) {
+		const open = vi.fn()
+		const vm = {
+			$messageBus: vi.fn(),
+			$api: { container: { getNetworks: () => Promise.resolve({ data: { data: [] } }) } },
+			$store: { state: { hardwareInfo: { mem: { total: 1 } } }, getters: { canWrite: true, canReadModule: () => true } },
+			$openAPI: { appManagement: { compose: { myComposeApp } } },
+			$buefy: { modal: { open } },
+		}
+		return { vm, open }
+	}
+
+	it('opens a git app with no container on its Repository tab alone, reading no compose app', async () => {
+		const myComposeApp = vi.fn()
+		const { vm, open } = section(myComposeApp)
+		const item = { name: 'jarvis', app_type: 'v2app', status: '', title: { en_us: 'jarvis' }, git: { new_commits: false, state: 'build_failed', deployed: false } }
+
+		await AppSection.methods.showConfigPanel.call(vm, item, true)
+
+		expect(myComposeApp).not.toHaveBeenCalled()
+		expect(open.mock.calls[0][0].props).toMatchObject({ id: 'jarvis', state: 'update', isCasa: true, settingComposeData: '', repositoryOnly: true })
+	})
+
+	it('reads the compose app of an app that has containers, as before', async () => {
+		const myComposeApp = vi.fn().mockResolvedValue({ data: 'name: jarvis\n' })
+		const { vm, open } = section(myComposeApp)
+		const item = { name: 'jarvis', app_type: 'v2app', status: 'running', title: { en_us: 'jarvis' }, git: { new_commits: false, state: 'idle', deployed: true } }
+
+		await AppSection.methods.showConfigPanel.call(vm, item, true)
+
+		expect(myComposeApp).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].props).toMatchObject({ settingComposeData: 'name: jarvis\n', repositoryOnly: false })
+	})
+})
+
+describe('app section update outcome', () => {
+	function section() {
+		const open = vi.fn()
+		const vm = {
+			$buefy: { toast: { open } },
+			$t: (key, params) => key.replace('{name}', params.name),
+			addIdToSessionStorage: vi.fn(),
+			getList: vi.fn(() => Promise.resolve()),
+			scrollToNewApp: vi.fn(),
+		}
+		return { vm, open }
+	}
+
+	const fire = (vm, Properties) =>
+		AppSection.sockets['app:update-end'].call(vm, { Properties })
+
+	it('reloads the grid and says so once an update applied', async () => {
+		const { vm, open } = section()
+
+		fire(vm, { 'app:name': 'syncthing', 'app:updated': 'true' })
+		await Promise.resolve()
+
+		expect(vm.getList).toHaveBeenCalledTimes(1)
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].message).toBe('syncthing has been updated to the latest version!')
+		expect(vm.addIdToSessionStorage).toHaveBeenCalledWith('syncthing')
+	})
+
+	it('leaves a recreate to the card that started it', () => {
+		// the card knows which container was asked for, refreshes the grid and reports
+		// the outcome itself. The section only has app:name, which for an imported
+		// container is the image -- so this toasted `ubi9/nginx-120` next to the card's
+		const { vm, open } = section()
+
+		fire(vm, { 'app:name': 'ubi9/nginx-120', 'app:updated': 'true', 'recreate:container:id': 'ab12cd34ef56' })
+
+		expect(open).not.toHaveBeenCalled()
+		expect(vm.getList).not.toHaveBeenCalled()
+	})
+
+	it('claims nothing on an update-end that does not say it applied', () => {
+		// published on failure too, and a pull that found something newer is not a
+		// recreate that survived it
+		const { vm, open } = section()
+
+		fire(vm, { 'app:name': 'syncthing' })
+		fire(vm, { 'app:name': 'syncthing', 'docker:image:updated': 'true' })
+
+		expect(vm.getList).not.toHaveBeenCalled()
+		expect(open).not.toHaveBeenCalled()
+	})
+})
+
+// The grid does not wait for the virtual machine probe: the card joins it when
+// the probe answers, at the place the saved order has for it, and an order that
+// has the card is not saved without it while the probe is out.
+describe('app section virtual machines card', () => {
+	function section(names) {
+		const vm = {
+			appList: names.map(name => ({ name })),
+			cardsProbing: [],
+			saveSortData: vi.fn(),
+		}
+		vm.sortApps = AppSection.methods.sortApps.bind(vm)
+		vm.saveSortIfChanged = AppSection.methods.saveSortIfChanged.bind(vm)
+		vm.probeCard = AppSection.methods.probeCard.bind(vm)
+		return vm
+	}
+	const names = vm => vm.appList.map(app => app.name)
+
+	it('adds the card at its saved place once the module answers', async () => {
+		hasVirtualMachines.mockResolvedValue(true)
+		const vm = section(['App Store', 'Files', 'jellyfin'])
+
+		await AppSection.methods.addVmCardWhenThere.call(vm, ['App Store', 'Virtual Machines', 'Files', 'jellyfin'])
+
+		expect(names(vm)).toEqual(['App Store', 'Virtual Machines', 'Files', 'jellyfin'])
+		expect(vm.saveSortData).not.toHaveBeenCalled()
+	})
+
+	it('adds it once, however many reads of the grid wait on the probe', async () => {
+		hasVirtualMachines.mockResolvedValue(true)
+		const vm = section(['App Store', 'Files'])
+
+		await Promise.all([
+			AppSection.methods.addVmCardWhenThere.call(vm, []),
+			AppSection.methods.addVmCardWhenThere.call(vm, []),
+		])
+
+		expect(names(vm)).toEqual(['App Store', 'Files', 'Virtual Machines'])
+	})
+
+	it('drops the card from the saved order only once the probe says it is not there', async () => {
+		let answer
+		hasVirtualMachines.mockReturnValue(new Promise((resolve) => {
+			answer = resolve
+		}))
+		const vm = section(['App Store', 'Files'])
+
+		const added = AppSection.methods.addVmCardWhenThere.call(vm, ['App Store', 'Virtual Machines', 'Files'])
+		expect(vm.saveSortData).not.toHaveBeenCalled()
+		answer(false)
+		await added
+
+		expect(names(vm)).toEqual(['App Store', 'Files'])
+		expect(vm.saveSortData).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe('app section when a module is installed or removed', () => {
+	const grid = apps => ({ appList: apps.map(name => ({ name })), sortApps: AppSection.methods.sortApps })
+	const names = vm => vm.appList.map(app => app.name)
+
+	it('asks the gateway again, and adds the card where the module answers now', async () => {
+		hasVirtualMachines.mockResolvedValue(true)
+		const vm = grid(['App Store', 'Files'])
+
+		await AppSection.methods.syncVmCard.call(vm)
+
+		expect(forgetVirtualMachines).toHaveBeenCalled()
+		expect(names(vm)).toEqual(['App Store', 'Files', 'Virtual Machines'])
+	})
+
+	it('takes the card away where the module does not answer any more', async () => {
+		hasVirtualMachines.mockResolvedValue(false)
+		const vm = grid(['App Store', 'Files', 'Virtual Machines'])
+
+		await AppSection.methods.syncVmCard.call(vm)
+
+		expect(names(vm)).toEqual(['App Store', 'Files'])
+	})
+
+	it('changes nothing when the card already says what the gateway says', async () => {
+		hasVirtualMachines.mockResolvedValue(true)
+		const vm = grid(['App Store', 'Virtual Machines'])
+
+		await AppSection.methods.syncVmCard.call(vm)
+
+		expect(names(vm)).toEqual(['App Store', 'Virtual Machines'])
+	})
+})
+
+describe('app section built-in cards', () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it('always carries Statistics next to Files', async () => {
+		const vm = {
+			$baseIp: 'localhost',
+			$openAPI: { appGrid: { getAppGrid: () => Promise.resolve({ data: { data: [] } }) } },
+			$api: { users: { getCustomStorage: () => Promise.resolve({ data: { data: { data: [] } } }) } },
+			appList: [],
+			getLinkAppList: () => Promise.resolve([]),
+			sortApps: AppSection.methods.sortApps,
+			builtInsOf: AppSection.methods.builtInsOf,
+			canWrite: true,
+			$store: { getters: { canReadModule: () => true } },
+			saveSortIfChanged: vi.fn(),
+			addVmCardWhenThere: vi.fn(),
+			addFleetCardWhenThere: vi.fn(),
+			addLogsCardWhenThere: vi.fn(),
+		}
+		await AppSection.methods.getList.call(vm)
+		const names = vm.appList.map(app => app.name)
+		expect(names).toContain('Files')
+		expect(names).toContain('Statistics')
+		expect(vm.appList.find(app => app.name === 'Statistics')).toMatchObject({ app_type: 'system', status: 'running' })
+	})
+
+	// the section with the real order-saving methods; the grid fails, the order is saved
+	function failingGrid(savedOrder, appList = []) {
+		const toast = vi.fn()
+		const setCustomStorage = vi.fn()
+		const vm = {
+			$baseIp: 'localhost',
+			$t: text => text,
+			$buefy: { toast: { open: toast } },
+			$openAPI: { appGrid: { getAppGrid: () => Promise.reject(new Error('docker is not running')) } },
+			$api: { users: {
+				getCustomStorage: () => Promise.resolve({ data: { data: { data: savedOrder } } }),
+				setCustomStorage,
+			} },
+			appList,
+			retryCount: 0,
+			appListErrorMessage: '',
+			gridMissing: false,
+			savedOrder: [],
+			cardsProbing: [],
+			getLinkAppList: () => Promise.resolve([]),
+			sortApps: AppSection.methods.sortApps,
+			builtInsOf: AppSection.methods.builtInsOf,
+			canWrite: true,
+			$store: { getters: { canReadModule: () => true } },
+			getList: vi.fn(),
+		}
+		for (const method of ['retryList', 'saveSortIfChanged', 'saveSortData', 'probeCard', 'addVmCardWhenThere', 'addFleetCardWhenThere', 'addLogsCardWhenThere', 'onSortEnd']) {
+			vm[method] = AppSection.methods[method].bind(vm)
+		}
+		return { vm, toast, setCustomStorage }
+	}
+
+	it('shows the built-in apps when the grid fails, keeps the saved order and reads the grid again', async () => {
+		vi.useFakeTimers()
+		hasVirtualMachines.mockResolvedValue(false)
+		const { vm, setCustomStorage } = failingGrid(['syncthing', 'Files'])
+		await AppSection.methods.getList.call(vm)
+
+		expect(vm.appList.map(app => app.name)).toContain('Files')
+		expect(vm.isLoading).toBe(false)
+		expect(setCustomStorage).not.toHaveBeenCalled()
+		vi.advanceTimersByTime(2000)
+		expect(vm.getList).toHaveBeenCalledTimes(1)
+	})
+
+	it('the Virtual Machines card coming while the grid fails keeps the grid apps in the saved order', async () => {
+		hasVirtualMachines.mockResolvedValue(true)
+		const { vm, setCustomStorage } = failingGrid(['syncthing', 'Virtual Machines', 'Files', 'jellyfin'])
+		await AppSection.methods.getList.call(vm)
+		await vi.waitFor(() => expect(vm.appList.map(app => app.name)).toContain('Virtual Machines'))
+
+		// saved or not, never without the grid's apps
+		for (const [, { data }] of setCustomStorage.mock.calls) {
+			expect(data).toEqual(expect.arrayContaining(['syncthing', 'jellyfin']))
+		}
+	})
+
+	it('a drag while the grid fails keeps the grid apps in the saved order, at their place', async () => {
+		hasVirtualMachines.mockResolvedValue(false)
+		const { vm, setCustomStorage } = failingGrid(['App Store', 'syncthing', 'Files', 'jellyfin', 'Statistics'])
+		await AppSection.methods.getList.call(vm)
+
+		// Statistics dragged to the front
+		const statistics = vm.appList.find(app => app.name === 'Statistics')
+		vm.appList = [statistics, ...vm.appList.filter(app => app !== statistics)]
+		vm.onSortEnd()
+
+		const saved = setCustomStorage.mock.calls.at(-1)[1].data
+		expect(saved[0]).toBe('Statistics')
+		expect(saved.indexOf('syncthing')).toBe(saved.indexOf('App Store') + 1)
+		expect(saved.indexOf('jellyfin')).toBe(saved.indexOf('Files') + 1)
+	})
+
+	it('a failure after a good read keeps the apps shown', async () => {
+		const shown = [{ name: 'Files' }, { name: 'jellyfin' }]
+		const { vm } = failingGrid(['Files', 'jellyfin'], shown)
+		await AppSection.methods.getList.call(vm)
+
+		expect(vm.appList).toBe(shown)
+		expect(vm.gridMissing).toBe(false)
+	})
+
+	it('says it again when the apps fail again after a good read', async () => {
+		const { vm, toast } = failingGrid([], [{ name: 'Files' }])
+		vm.retryCount = 5
+		await AppSection.methods.getList.call(vm)
+		expect(toast).toHaveBeenCalledTimes(1)
+
+		// a good read clears the failure
+		vm.$openAPI.appGrid.getAppGrid = () => Promise.resolve({ data: { data: [] } })
+		await AppSection.methods.getList.call(vm)
+		expect(vm.appListErrorMessage).toBe('')
+
+		vm.$openAPI.appGrid.getAppGrid = () => Promise.reject(new Error('docker is not running'))
+		vm.retryCount = 5
+		await AppSection.methods.getList.call(vm)
+		expect(toast).toHaveBeenCalledTimes(2)
+	})
+
+	it('says once that the apps cannot be loaded, not at every read', async () => {
+		const { vm, toast } = failingGrid([], [{ name: 'Files' }])
+		vm.retryCount = 5
+		await AppSection.methods.getList.call(vm)
+		await AppSection.methods.getList.call(vm)
+
+		expect(toast).toHaveBeenCalledTimes(1)
+	})
+})
+
+// ReCasaOS/CasaOS#97: each card's probe answers on its own. A card that answers
+// first saves the order while a slower one is not shown yet: that save must keep
+// the slower card's place, or the next read of the grid puts it last.
+describe('app section cards whose probes answer one after the other', () => {
+	function section(savedOrder) {
+		const stored = { order: savedOrder }
+		const setCustomStorage = vi.fn((key, { data }) => {
+			stored.order = data
+		})
+		const vm = {
+			$baseIp: 'localhost',
+			$openAPI: { appGrid: { getAppGrid: () => Promise.resolve({ data: { data: [{ name: 'jellyfin' }] } }) } },
+			$api: { users: {
+				getCustomStorage: () => Promise.resolve({ data: { data: { data: stored.order } } }),
+				setCustomStorage,
+			} },
+			appList: [],
+			retryCount: 0,
+			appListErrorMessage: '',
+			gridMissing: false,
+			savedOrder: [],
+			getLinkAppList: () => Promise.resolve([]),
+			sortApps: AppSection.methods.sortApps,
+			builtInsOf: AppSection.methods.builtInsOf,
+			canWrite: true,
+			$store: { getters: { canReadModule: () => true } },
+		}
+		Object.assign(vm, AppSection.data.call(vm), { appList: [], savedOrder: [] })
+		for (const method of ['getList', 'retryList', 'saveSortIfChanged', 'saveSortData', 'probeCard', 'addVmCardWhenThere', 'addFleetCardWhenThere', 'addLogsCardWhenThere']) {
+			vm[method] = AppSection.methods[method].bind(vm)
+		}
+		return { vm, stored, setCustomStorage }
+	}
+
+	it('keeps Logs at its saved place when the Virtual Machines card answers first', async () => {
+		const saved = ['App Store', 'Files', 'Statistics', 'logs', 'Virtual Machines', 'jellyfin']
+		let logsAnswer
+		hasVirtualMachines.mockResolvedValue(true)
+		hasLogs.mockImplementationOnce(() => new Promise((resolve) => {
+			logsAnswer = resolve
+		}))
+		const { vm, stored, setCustomStorage } = section(saved)
+
+		await vm.getList()
+		await vi.waitFor(() => expect(vm.appList.map(app => app.name)).toContain('Virtual Machines'))
+		logsAnswer(true)
+		await vi.waitFor(() => expect(vm.appList.map(app => app.name)).toContain('logs'))
+		// the next read of the grid, five seconds later
+		await vm.getList()
+
+		for (const [, { data }] of setCustomStorage.mock.calls) {
+			expect(data).toContain('logs')
+		}
+		expect(stored.order.indexOf('logs')).toBe(stored.order.indexOf('Statistics') + 1)
+		const names = vm.appList.map(app => app.name)
+		expect(names.indexOf('logs')).toBe(names.indexOf('Statistics') + 1)
+	})
+})
+
+describe('app section when the role changes from owner to plain account', () => {
+	it('drops the Virtual Machines and Fleet cards at the next read, and their tiles and polling with them', async () => {
+		let may = true
+		const vm = {
+			$baseIp: 'localhost',
+			$openAPI: { appGrid: { getAppGrid: () => Promise.resolve({ data: { data: [{ name: 'jellyfin' }] } }) } },
+			$api: { users: { getCustomStorage: () => Promise.resolve({ data: { data: { data: [] } } }), setCustomStorage: vi.fn() } },
+			appList: [{ name: 'Virtual Machines' }, { name: 'Fleet' }, { name: 'jellyfin' }],
+			retryCount: 0,
+			appListErrorMessage: '',
+			gridMissing: false,
+			savedOrder: [],
+			getLinkAppList: () => Promise.resolve([]),
+			sortApps: AppSection.methods.sortApps,
+			builtInsOf: AppSection.methods.builtInsOf,
+			get canWrite() { return may },
+			$store: { getters: { canReadModule: () => may } },
+		}
+		Object.assign(vm, AppSection.data.call(vm), { appList: vm.appList, savedOrder: [] })
+		for (const method of ['getList', 'retryList', 'saveSortIfChanged', 'saveSortData', 'probeCard', 'addVmCardWhenThere', 'addFleetCardWhenThere', 'addLogsCardWhenThere', 'pollVms'])
+			vm[method] = AppSection.methods[method].bind(vm)
+		vm.vms = [{ name: 'a vm' }]
+
+		may = false
+		await vm.getList()
+		await vm.pollVms()
+
+		const names = vm.appList.map(app => app.name)
+		expect(names).not.toContain('Virtual Machines')
+		expect(names).not.toContain('Fleet')
+		expect(names).toContain('jellyfin')
+		// no card, no tiles, and no read of the machines' list is scheduled
+		expect(vm.vms).toEqual([])
+		expect(listVirtualMachines).not.toHaveBeenCalled()
+		clearTimeout(vm.vmPollTimer)
+	})
+})
+
+// A plain account sees the cards of its rights: the Virtual Machines card with the vm right, never the Fleet card, whose page
+// reads every box through the relay.
+describe('app section of an account of role user', () => {
+	function userSection(rights) {
+		const vm = {
+			$baseIp: 'localhost',
+			$openAPI: { appGrid: { getAppGrid: () => Promise.resolve({ data: { data: [{ name: 'jellyfin' }] } }) } },
+			$api: { users: { getCustomStorage: () => Promise.resolve({ data: { data: { data: [] } } }), setCustomStorage: vi.fn() } },
+			appList: [{ name: 'Virtual Machines' }, { name: 'Fleet' }, { name: 'jellyfin' }],
+			retryCount: 0,
+			appListErrorMessage: '',
+			gridMissing: false,
+			savedOrder: [],
+			getLinkAppList: () => Promise.resolve([]),
+			sortApps: AppSection.methods.sortApps,
+			builtInsOf: AppSection.methods.builtInsOf,
+			canWrite: false,
+			$store: { getters: { canReadModule: name => rights.includes(name) } },
+		}
+		Object.assign(vm, AppSection.data.call(vm), { appList: vm.appList, savedOrder: [] })
+		for (const method of ['getList', 'retryList', 'saveSortIfChanged', 'saveSortData', 'probeCard', 'addVmCardWhenThere', 'addFleetCardWhenThere', 'addLogsCardWhenThere', 'pollVms'])
+			vm[method] = AppSection.methods[method].bind(vm)
+		return vm
+	}
+
+	afterEach(() => {
+		listVirtualMachines.mockReset()
+	})
+
+	it('with the vm right, keeps the Virtual Machines card and reads its machines, and has no Fleet card even with the fleet right', async () => {
+		listVirtualMachines.mockResolvedValue([{ id: 'a', title: 'Alpha', state: 'running' }])
+		const vm = userSection(['vm', 'fleet'])
+		await vm.getList()
+		await vm.pollVms()
+
+		const names = vm.appList.map(app => app.name)
+		expect(names).toContain('Virtual Machines')
+		expect(names).not.toContain('Fleet')
+		expect(listVirtualMachines).toHaveBeenCalled()
+		clearTimeout(vm.vmPollTimer)
+	})
+
+	it('without the vm right, has no Virtual Machines card and never reads the machines', async () => {
+		const vm = userSection(['storage'])
+		await vm.getList()
+		await vm.pollVms()
+
+		expect(vm.appList.map(app => app.name)).not.toContain('Virtual Machines')
+		expect(listVirtualMachines).not.toHaveBeenCalled()
+		clearTimeout(vm.vmPollTimer)
+	})
+})
+
+// One tile per VM, right after the Virtual Machines card, by title. They are not
+// apps: they never reach the saved order, whatever is dragged where.
+describe('app section VM tiles', () => {
+	const aVm = (id, title = id, state = 'running') => ({ id, title, state })
+	function section(names, vms = []) {
+		const vm = {
+			appList: names.map(name => ({ name })),
+			filter: 'all',
+			vms,
+			$api: { users: { setCustomStorage: vi.fn() } },
+			$buefy: { toast: { open: vi.fn() } },
+		}
+		Object.defineProperty(vm, 'gridList', {
+			get: () => AppSection.computed.gridList.get.call(vm),
+			set: list => AppSection.computed.gridList.set.call(vm, list),
+		})
+		vm.pollVms = AppSection.methods.pollVms.bind(vm)
+		vm.saveSortData = AppSection.methods.saveSortData.bind(vm)
+		return vm
+	}
+	const shown = vm => vm.gridList.map(item => item.vmTile ? `tile:${item.vm.title}` : item.name)
+	const hide = (hidden) => {
+		Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+	}
+
+	afterEach(() => {
+		vi.useRealTimers()
+		hide(false)
+		listVirtualMachines.mockReset()
+	})
+
+	it('(1, 4) shows a tile per VM right after the Virtual Machines card', () => {
+		const vm = section(['App Store', 'Virtual Machines', 'Files'], [aVm('a', 'Alpha'), aVm('b', 'Beta')])
+
+		expect(shown(vm)).toEqual(['App Store', 'Virtual Machines', 'tile:Alpha', 'tile:Beta', 'Files'])
+	})
+
+	it('(3) shows no tile and asks for no VM when the probe says there is no module', async () => {
+		const vm = section(['App Store', 'Files'], [aVm('a')])
+
+		await vm.pollVms()
+
+		expect(listVirtualMachines).not.toHaveBeenCalled()
+		expect(shown(vm)).toEqual(['App Store', 'Files'])
+	})
+
+	it('(3) shows no tile and no toast when the list cannot be read', async () => {
+		listVirtualMachines.mockRejectedValue(new Error('502'))
+		const vm = section(['Virtual Machines'], [aVm('a')])
+
+		for (let i = 0; i < 3; i++) {
+			await vm.pollVms()
+			clearTimeout(vm.vmPollTimer)
+		}
+
+		expect(shown(vm)).toEqual(['Virtual Machines'])
+		expect(vm.$buefy.toast.open).not.toHaveBeenCalled()
+	})
+
+	it('(4) keeps the order payload to the apps, whatever was dragged where', () => {
+		const vm = section(['App Store', 'Virtual Machines', 'Files', 'jellyfin'], [aVm('a'), aVm('b')])
+		const [store, vms, a, b, files, jellyfin] = vm.gridList
+
+		// jellyfin dropped between the tiles, and a tile dragged to the front
+		vm.gridList = [b, store, vms, a, jellyfin, files]
+		vm.saveSortData()
+
+		expect(vm.$api.users.setCustomStorage).toHaveBeenCalledWith('app_order', { data: ['App Store', 'Virtual Machines', 'jellyfin', 'Files'] })
+		// the tiles go back after their card
+		expect(shown(vm)).toEqual(['App Store', 'Virtual Machines', 'tile:a', 'tile:b', 'jellyfin', 'Files'])
+	})
+
+	it('(5) follows the states, and a VM that is deleted goes', async () => {
+		vi.useFakeTimers()
+		const vm = section(['Virtual Machines'])
+		listVirtualMachines.mockResolvedValueOnce([aVm('a'), aVm('b')]).mockResolvedValueOnce([aVm('a', 'a', 'shut-off')])
+
+		await vm.pollVms()
+		expect(shown(vm)).toEqual(['Virtual Machines', 'tile:a', 'tile:b'])
+		await vi.advanceTimersByTimeAsync(5000)
+
+		expect(vm.vms).toEqual([aVm('a', 'a', 'shut-off')])
+		AppSection.beforeUnmount.call({ ...vm, $EventBus: { $off: vi.fn() } })
+	})
+
+	it('(3) reads the VMs as soon as the card joins the grid, and drops them with it', () => {
+		const pollVms = vi.fn()
+
+		AppSection.watch.hasVmCard.call({ pollVms })
+
+		expect(pollVms).toHaveBeenCalledTimes(1)
+		expect(AppSection.computed.hasVmCard.call({ appList: [{ name: 'Virtual Machines' }] })).toBe(true)
+		expect(AppSection.computed.hasVmCard.call({ appList: [{ name: 'Files' }] })).toBe(false)
+	})
+
+	it('(5) asks once at a time', async () => {
+		let answer
+		listVirtualMachines.mockReturnValue(new Promise((resolve) => {
+			answer = resolve
+		}))
+		const vm = section(['Virtual Machines'])
+
+		const first = vm.pollVms()
+		vm.pollVms()
+		answer([])
+		await first
+
+		expect(listVirtualMachines).toHaveBeenCalledTimes(1)
+		clearTimeout(vm.vmPollTimer)
+	})
+
+	it('(5) does not ask while the tab is hidden, and asks again once it is shown', async () => {
+		vi.useFakeTimers()
+		listVirtualMachines.mockResolvedValue([])
+		const vm = section(['Virtual Machines'])
+		hide(true)
+
+		await vm.pollVms()
+		await vi.advanceTimersByTimeAsync(30000)
+		expect(listVirtualMachines).not.toHaveBeenCalled()
+
+		hide(false)
+		vm.canWrite = true
+		await AppSection.methods.onVisibility.call(vm)
+		expect(listVirtualMachines).toHaveBeenCalledTimes(1)
+		await vi.advanceTimersByTimeAsync(5000)
+		expect(listVirtualMachines).toHaveBeenCalledTimes(2)
+
+		// hidden again: the timer is dropped
+		hide(true)
+		AppSection.methods.onVisibility.call(vm)
+		await vi.advanceTimersByTimeAsync(30000)
+		expect(listVirtualMachines).toHaveBeenCalledTimes(2)
+	})
+
+	it('(5) stops for good when the grid goes, timer and listener with it', async () => {
+		vi.useFakeTimers()
+		listVirtualMachines.mockResolvedValue([])
+		const vm = section(['Virtual Machines'])
+		vm.onVisibility = AppSection.methods.onVisibility.bind(vm)
+		const removed = vi.spyOn(document, 'removeEventListener')
+		await vm.pollVms()
+
+		AppSection.beforeUnmount.call(Object.assign(vm, { $EventBus: { $off: vi.fn() } }))
+		await vi.advanceTimersByTimeAsync(30000)
+
+		expect(listVirtualMachines).toHaveBeenCalledTimes(1)
+		expect(removed).toHaveBeenCalledWith('visibilitychange', vm.onVisibility)
+		expect(vi.getTimerCount()).toBe(0)
+		removed.mockRestore()
+	})
+})
+
+// The tiles are not drop targets: an app is dropped among the apps only, so it
+// never lands where the tiles are redrawn over it.
+describe('app section VM tiles out of the drag', () => {
+	const tileItem = { name: 'vm-tile:a', vmTile: true, vm: { id: 'a' } }
+	const move = (vm, element, willInsertAfter = false) =>
+		AppSection.methods.checkMove.call(vm, { relatedContext: { element }, willInsertAfter })
+
+	it('(1) starts no drag on a tile, and lets its click through', () => {
+		const options = AppSection.computed.dragOptions.call({})
+
+		expect(options.filter).toBe('.vm-tile-item')
+		expect(options.preventOnFilter).toBe(false)
+	})
+
+	// a swipe on a touch screen scrolls the grid: only a long press starts a drag (a mouse drags at once)
+	it('starts a drag on a touch screen only after a long press', () => {
+		const options = AppSection.computed.dragOptions.call({})
+
+		expect(options.delay).toBeGreaterThanOrEqual(200)
+		expect(options.delayOnTouchOnly).toBe(true)
+		expect(options.touchStartThreshold).toBeGreaterThan(0)
+	})
+
+	it('(1) rejects a move over a tile', () => {
+		expect(move({ vms: [{ id: 'a' }] }, tileItem)).toBe(false)
+		expect(move({ vms: [{ id: 'a' }] }, tileItem, true)).toBe(false)
+	})
+
+	it('(1) rejects a drop right after the Virtual Machines card while tiles follow it', () => {
+		const card = { name: 'Virtual Machines' }
+
+		expect(move({ vms: [{ id: 'a' }] }, card, true)).toBe(false)
+		expect(move({ vms: [{ id: 'a' }] }, card, false)).toBe(true)
+		expect(move({ vms: [] }, card, true)).toBe(true)
+	})
+
+	it('(1) lets an app move among the apps', () => {
+		expect(move({ vms: [{ id: 'a' }] }, { name: 'Files' })).toBe(true)
+		expect(move({ vms: [{ id: 'a' }] }, { name: 'Files' }, true)).toBe(true)
+	})
+})
+
+describe('app section VM tiles riding out a failed poll', () => {
+	const aVm = (id, state = 'running') => ({ id, title: id, state })
+	function section(vms = []) {
+		const vm = { appList: [{ name: 'Virtual Machines' }], vms }
+		vm.pollVms = AppSection.methods.pollVms.bind(vm)
+		return vm
+	}
+	afterEach(() => {
+		vi.useRealTimers()
+		listVirtualMachines.mockReset()
+	})
+	const poll = async (vm) => {
+		await vm.pollVms()
+		clearTimeout(vm.vmPollTimer)
+	}
+
+	it('(2) keeps the last list through one and two failed polls, and drops it on the third', async () => {
+		listVirtualMachines.mockRejectedValue(new Error('502'))
+		const vm = section([aVm('a')])
+
+		await poll(vm)
+		expect(vm.vms).toEqual([aVm('a')])
+		await poll(vm)
+		expect(vm.vms).toEqual([aVm('a')])
+		await poll(vm)
+		expect(vm.vms).toEqual([])
+	})
+
+	it('(2) counts again from nothing once a poll works', async () => {
+		const vm = section([aVm('a')])
+		listVirtualMachines.mockRejectedValueOnce(new Error('502')).mockRejectedValueOnce(new Error('502'))
+			.mockResolvedValueOnce([aVm('b')])
+			.mockRejectedValueOnce(new Error('502')).mockRejectedValueOnce(new Error('502'))
+
+		for (let i = 0; i < 5; i++) {
+			await poll(vm)
+		}
+
+		expect(vm.vms).toEqual([aVm('b')])
+	})
+
+	it('(2) drops the list at once when the module is not there', async () => {
+		listVirtualMachines.mockRejectedValue({ response: { status: 404 } })
+		const vm = section([aVm('a')])
+
+		await poll(vm)
+
+		expect(vm.vms).toEqual([])
+	})
+
+	it('(2) drops the list at once when the card goes', async () => {
+		const vm = section([aVm('a')])
+		vm.appList = []
+
+		await poll(vm)
+
+		expect(vm.vms).toEqual([])
+	})
+
+	it('(4) leaves the list as it is when nothing changed', async () => {
+		const vms = [aVm('a')]
+		listVirtualMachines.mockResolvedValue([aVm('a')])
+		const vm = section(vms)
+
+		await poll(vm)
+
+		expect(vm.vms).toBe(vms)
+	})
+
+	it('(4) gives up on a read that hangs after 15 s, counts it as failed and polls again', async () => {
+		vi.useFakeTimers()
+		listVirtualMachines.mockReturnValueOnce(new Promise(() => {})).mockResolvedValue([aVm('b')])
+		const vm = section([aVm('a')])
+
+		vm.pollVms()
+		await vi.advanceTimersByTimeAsync(15000)
+		expect(vm.vms).toEqual([aVm('a')])
+		expect(vm.vmPolling).toBe(false)
+		expect(vm.vmFailures).toBe(1)
+
+		await vi.advanceTimersByTimeAsync(5000)
+		expect(listVirtualMachines).toHaveBeenCalledTimes(2)
+		expect(vm.vms).toEqual([aVm('b')])
+		clearTimeout(vm.vmPollTimer)
+	})
+
+	it('reloads its list on the event while mounted, and no more once gone', async () => {
+		const { default: createEventBus } = await import('@/events/eventBus.js')
+		const { default: events } = await import('@/events/events')
+		const bus = createEventBus()
+		const vm = { getList: vi.fn(), isMobile: () => false, $EventBus: bus, pollVms: vi.fn(), onVisibility: vi.fn(), startListTimer: vi.fn(), syncVmCard() {}, syncFleetCard() {} }
+		vm.reloadList = AppSection.methods.reloadList.bind(vm)
+
+		AppSection.created.call(vm)
+		vm.getList.mockClear()
+		bus.$emit(events.RELOAD_APP_LIST)
+		expect(vm.getList).toHaveBeenCalledTimes(1)
+
+		AppSection.beforeUnmount.call(vm)
+		bus.$emit(events.RELOAD_APP_LIST)
+		expect(vm.getList).toHaveBeenCalledTimes(1)
+	})
+
+	it('has no watch of the role: the grid is made again when it changes (keyed by the access)', () => {
+		expect(AppSection.watch.canWrite).toBeUndefined()
+	})
+
+	it('(5) declares its polling state when the grid is made', () => {
+		const vm = { getList: vi.fn(), isMobile: () => false, $EventBus: { $on: vi.fn() }, pollVms: vi.fn(), onVisibility: vi.fn(), startListTimer: vi.fn() }
+		const added = vi.spyOn(document, 'addEventListener')
+
+		AppSection.created.call(vm)
+		clearInterval(vm.ListRefreshTimer)
+
+		expect(vm).toMatchObject({ vmPollStopped: false, vmPolling: false, vmPollTimer: null, vmFailures: 0 })
+		expect(added).toHaveBeenCalledWith('visibilitychange', vm.onVisibility)
+		added.mockRestore()
+	})
+})
+
+describe('app section with the system row (beta dashboard)', () => {
+	const store = { name: 'App Store', app_type: 'system' }
+	const files = { name: 'Files', app_type: 'system' }
+	const jellyfin = { name: 'jellyfin', app_type: 'v2app' }
+	const nextcloud = { name: 'nextcloud', app_type: 'v2app' }
+	const { get, set } = AppSection.computed.gridList
+	const systemApps = AppSection.computed.systemApps
+
+	it('draws the built-ins in their own row and keeps them out of the grid', () => {
+		const vm = { systemFirst: true, filter: 'all', vms: [], appList: [store, jellyfin, files, nextcloud] }
+		vm.systemApps = systemApps.call(vm)
+
+		expect(vm.systemApps).toEqual([store, files])
+		expect(get.call(vm)).toEqual([jellyfin, nextcloud])
+	})
+
+	it('draws a tile per VM after the Virtual Machines card of the System row, and none in the grid', () => {
+		const vms = { name: 'Virtual Machines', app_type: 'system' }
+		const alpha = { id: 'a', title: 'Alpha' }
+		const vm = { systemFirst: true, filter: 'all', vms: [alpha], appList: [store, vms, files, jellyfin] }
+
+		expect(systemApps.call(vm)).toEqual([store, vms, { name: 'vm-tile:a', vmTile: true, vm: alpha }, files])
+		expect(get.call(vm)).toEqual([jellyfin])
+	})
+
+	it('puts the built-ins back first after a drag, so the saved order keeps them', () => {
+		const vm = { systemFirst: true, filter: 'all', vms: [], appList: [store, jellyfin, files, nextcloud] }
+
+		set.call(vm, [nextcloud, jellyfin])
+
+		expect(vm.appList).toEqual([store, files, nextcloud, jellyfin])
+	})
+
+	it('filters the grid by state, counts each filter, and never saves an order from a filtered grid', () => {
+		const running = { name: 'jellyfin', app_type: 'v2app', status: 'running', update_available: true }
+		const stopped = { name: 'nextcloud', app_type: 'v2app', status: 'exited' }
+		const link = { name: 'blog', app_type: 'LinkApp' }
+		const vm = { systemFirst: true, filter: 'stopped', vms: [], appList: [store, running, stopped, link] }
+		vm.$t = key => key
+		const names = () => get.call(vm).map(app => app.name)
+
+		expect(names()).toEqual(['nextcloud'])
+		vm.filter = 'running'
+		expect(names()).toEqual(['jellyfin'])
+		vm.filter = 'updates'
+		expect(names()).toEqual(['jellyfin'])
+
+		expect(AppSection.computed.filterOptions.call(vm).map(option => [option.id, option.count]))
+			.toEqual([['all', 3], ['running', 1], ['stopped', 1], ['updates', 1]])
+
+		// the drag of a filtered grid hands back some of the apps: the list stays whole
+		set.call(vm, [running])
+		expect(vm.appList).toEqual([store, running, stopped, link])
+		expect(AppSection.computed.dragOptions.call(vm).disabled).toBe(true)
+	})
+
+	it('changes nothing on the classic dashboard', () => {
+		const vm = { systemFirst: false, filter: 'all', vms: [], appList: [store, jellyfin, files, nextcloud] }
+		vm.systemApps = systemApps.call(vm)
+
+		expect(vm.systemApps).toEqual([])
+		expect(get.call(vm)).toEqual([store, jellyfin, files, nextcloud])
+	})
+})
+
+// The Fleet card is there only where the core says this box is a master, and
+// joins the grid the way the Virtual Machines card does.
+describe('app section fleet card', () => {
+	function section(names) {
+		const vm = {
+			appList: names.map(name => ({ name })),
+			cardsProbing: [],
+			saveSortData: vi.fn(),
+		}
+		vm.sortApps = AppSection.methods.sortApps.bind(vm)
+		vm.saveSortIfChanged = AppSection.methods.saveSortIfChanged.bind(vm)
+		vm.probeCard = AppSection.methods.probeCard.bind(vm)
+		return vm
+	}
+	const names = vm => vm.appList.map(app => app.name)
+
+	it('is there only where the core says master, at its saved place', async () => {
+		hasFleet.mockResolvedValue(true)
+		const vm = section(['App Store', 'Files', 'Statistics', 'jellyfin'])
+		await AppSection.methods.addFleetCardWhenThere.call(vm, ['App Store', 'Files', 'Statistics', 'Fleet', 'jellyfin'])
+		expect(names(vm)).toEqual(['App Store', 'Files', 'Statistics', 'Fleet', 'jellyfin'])
+		expect(vm.saveSortData).not.toHaveBeenCalled()
+
+		hasFleet.mockResolvedValue(false)
+		const other = section(['App Store', 'Files'])
+		await AppSection.methods.addFleetCardWhenThere.call(other, [])
+		expect(names(other)).toEqual(['App Store', 'Files'])
+	})
+
+	it('is asked again when the role changes, and comes or goes', async () => {
+		const grid = apps => ({ appList: apps.map(name => ({ name })), sortApps: AppSection.methods.sortApps })
+		hasFleet.mockResolvedValue(true)
+		const vm = grid(['App Store', 'Files'])
+		await AppSection.methods.syncFleetCard.call(vm)
+		expect(forgetFleet).toHaveBeenCalled()
+		expect(names(vm)).toEqual(['App Store', 'Files', 'Fleet'])
+
+		hasFleet.mockResolvedValue(false)
+		await AppSection.methods.syncFleetCard.call(vm)
+		expect(names(vm)).toEqual(['App Store', 'Files'])
+	})
+
+	it('listens for the role change while mounted', () => {
+		const source = readFileSync('src/components/Apps/AppSection.vue', 'utf8')
+		expect(source).toMatch(/\$EventBus\.\$on\(events\.FLEET_CHANGED, this\.syncFleetCard\)/)
+		expect(source).toMatch(/\$EventBus\.\$off\(events\.FLEET_CHANGED, this\.syncFleetCard\)/)
+	})
+})
+
+// The beta dashboard's Favorites row: names pinned from a card's menu, kept in the user's custom storage
+describe('app section favorites (beta dashboard)', () => {
+	const apps = [
+		{ name: 'Files', app_type: 'system' },
+		{ name: 'jellyfin', app_type: 'v2app' },
+		{ name: 'immich', app_type: 'v2app' },
+	]
+
+	function section(favorites) {
+		const setCustomStorage = vi.fn()
+		const vm = { favorites, appList: apps, $api: { users: { setCustomStorage } } }
+		vm.isFavorite = AppSection.methods.isFavorite.bind(vm)
+		vm.toggleFavorite = AppSection.methods.toggleFavorite.bind(vm)
+		return { vm, setCustomStorage }
+	}
+
+	it('pins an app at the end, saves the names, and unpins it from the same menu item', () => {
+		const { vm, setCustomStorage } = section(['jellyfin'])
+
+		vm.toggleFavorite({ name: 'immich' })
+		expect(vm.favorites).toEqual(['jellyfin', 'immich'])
+		expect(setCustomStorage).toHaveBeenLastCalledWith('app_favorites', { data: ['jellyfin', 'immich'] })
+
+		vm.toggleFavorite({ name: 'jellyfin' })
+		expect(vm.favorites).toEqual(['immich'])
+		expect(setCustomStorage).toHaveBeenLastCalledWith('app_favorites', { data: ['immich'] })
+	})
+
+	it('forgets a pinned app that is no longer installed at the next change', () => {
+		const { vm } = section(['gone', 'jellyfin'])
+
+		vm.toggleFavorite({ name: 'immich' })
+
+		expect(vm.favorites).toEqual(['jellyfin', 'immich'])
+	})
+
+	it('shows the pinned apps in pinned order, without the missing ones and the system ones', () => {
+		const vm = { favorites: ['immich', 'gone', 'Files', 'jellyfin'], appList: apps }
+
+		expect(AppSection.computed.favoriteApps.call(vm).map(app => app.name)).toEqual(['immich', 'jellyfin'])
+	})
+
+	it('keeps the order a drag leaves the pinned apps in, and saves it', () => {
+		const { vm, setCustomStorage } = section(['jellyfin', 'immich'])
+		vm.reorderFavorites = AppSection.methods.reorderFavorites.bind(vm)
+
+		vm.reorderFavorites([{ name: 'immich' }, { name: 'jellyfin' }])
+
+		expect(vm.favorites).toEqual(['immich', 'jellyfin'])
+		expect(setCustomStorage).toHaveBeenLastCalledWith('app_favorites', { data: ['immich', 'jellyfin'] })
+	})
+
+	it('drags the pinned apps among themselves, even while the grid is filtered', () => {
+		const options = AppSection.computed.favoriteDragOptions.call({ dragOptions: AppSection.computed.dragOptions.call({ filter: 'running' }) })
+
+		expect(options).toMatchObject({ group: 'favorites', disabled: false })
+	})
+
+	it('reads the saved names, and keeps none when the box cannot answer', async () => {
+		const vm = { favorites: [], $api: { users: { getCustomStorage: vi.fn(() => Promise.resolve({ data: { data: { data: ['immich'] } } })) } } }
+		await AppSection.methods.loadFavorites.call(vm)
+		expect(vm.favorites).toEqual(['immich'])
+		expect(vm.$api.users.getCustomStorage).toHaveBeenCalledWith('app_favorites')
+
+		const down = { favorites: [], $api: { users: { getCustomStorage: () => Promise.reject(new Error('down')) } } }
+		await AppSection.methods.loadFavorites.call(down)
+		expect(down.favorites).toEqual([])
+	})
+})
+
+describe('app section system subtitles (beta dashboard)', () => {
+	const tp = (key, params = {}) => key.replace(/\{(\w+)\}/g, (_, name) => params[name])
+	const subtitle = (name, vm) => AppSection.methods.systemSubtitle.call({ $t: tp, appList: [], vms: [], ...vm }, { name })
+
+	it('says what each system card is for', () => {
+		expect(subtitle('Files')).toBe('Your files')
+		expect(subtitle('Statistics')).toBe('CPU, memory, disks')
+		expect(subtitle('Fleet')).toBe('')
+	})
+
+	it('counts the updates on the App Store card, and the VMs on theirs, when there are some', () => {
+		expect(subtitle('App Store')).toBe('App catalogue')
+		expect(subtitle('App Store', { appList: [{ update_available: true }, {}, { update_available: true }] })).toBe('Updates: 2')
+		expect(subtitle('Virtual Machines')).toBe('Virtual Machines')
+		expect(subtitle('Virtual Machines', { vms: [{}, {}, {}] })).toBe('VMs: 3')
+	})
+})
+
+// The Logs card is there only where AppManagement keeps logs: an older one shows nothing new.
+describe('app section logs card', () => {
+	function section(names) {
+		const vm = {
+			appList: names.map(name => ({ name })),
+			cardsProbing: [],
+			saveSortData: vi.fn(),
+		}
+		vm.sortApps = AppSection.methods.sortApps.bind(vm)
+		vm.saveSortIfChanged = AppSection.methods.saveSortIfChanged.bind(vm)
+		vm.probeCard = AppSection.methods.probeCard.bind(vm)
+		return vm
+	}
+	const names = vm => vm.appList.map(app => app.name)
+
+	it('is there only where AppManagement keeps logs, at its saved place', async () => {
+		hasLogs.mockResolvedValue(true)
+		const vm = section(['App Store', 'Files', 'Statistics', 'jellyfin'])
+		await AppSection.methods.addLogsCardWhenThere.call(vm, ['App Store', 'Files', 'Statistics', 'logs', 'jellyfin'])
+		expect(names(vm)).toEqual(['App Store', 'Files', 'Statistics', 'logs', 'jellyfin'])
+		expect(vm.saveSortData).not.toHaveBeenCalled()
+
+		hasLogs.mockResolvedValue(false)
+		const other = section(['App Store', 'Files'])
+		await AppSection.methods.addLogsCardWhenThere.call(other, [])
+		expect(names(other)).toEqual(['App Store', 'Files'])
+	})
+})
+
+describe('app section reading its lists on a timer', () => {
+	afterEach(() => vi.useRealTimers())
+
+	it('skips a tick while the last read is still on its way, and asks again once it answered', () => {
+		vi.useFakeTimers()
+		const vm = { canWrite: true, getList: vi.fn(), listReading: Date.now(), $store: { getters: { canReadModule: () => false } } }
+		AppSection.methods.startListTimer.call(vm)
+
+		vi.advanceTimersByTime(5000)
+		expect(vm.getList).not.toHaveBeenCalled()
+
+		vm.listReading = 0
+		vi.advanceTimersByTime(5000)
+		expect(vm.getList).toHaveBeenCalledTimes(1)
+		clearInterval(vm.ListRefreshTimer)
+	})
+})
+
+describe('app section and the apps hidden from the dashboard', () => {
+	const jellyfin = { name: 'jellyfin', status: 'running' }
+	const cloudflared = { name: 'cloudflared', status: 'running', hidden_on_dashboard: true }
+	function section(showHidden) {
+		return { systemFirst: false, filter: 'all', vms: [], showHidden, favorites: ['cloudflared', 'jellyfin'], appList: [cloudflared, jellyfin], $t: text => text }
+	}
+	const computed = (name, vm) => (AppSection.computed[name].get || AppSection.computed[name]).call(vm)
+	const names = list => list.map(app => app.name)
+
+	it('leaves them out of the grid, the favorites and the counts, and keeps them in the list', () => {
+		const vm = section(false)
+		expect(names(computed('gridList', vm))).toEqual(['jellyfin'])
+		expect(names(computed('favoriteApps', vm))).toEqual(['jellyfin'])
+		expect(computed('filterOptions', vm).find(option => option.id === 'running').count).toBe(1)
+		expect(names(computed('hiddenApps', vm))).toEqual(['cloudflared'])
+
+		// a drag gives back what was drawn: the hidden app stays in the list, and so in the saved order
+		AppSection.computed.gridList.set.call(vm, [jellyfin])
+		expect(names(vm.appList)).toEqual(['jellyfin', 'cloudflared'])
+	})
+
+	it('draws them when the admin asks, behind a line only the admin gets', () => {
+		const vm = section(true)
+		expect(names(computed('gridList', vm))).toEqual(['cloudflared', 'jellyfin'])
+		expect(computed('filterOptions', vm).find(option => option.id === 'running').count).toBe(2)
+
+		const source = readFileSync('src/components/Apps/AppSection.vue', 'utf8')
+		expect(source).toContain('v-if="$store.getters.isAdmin && hiddenApps.length > 0" class="hidden-apps')
+		expect(source).toContain(`'is-dashboard-hidden': isHiddenApp(item)`)
+	})
+})

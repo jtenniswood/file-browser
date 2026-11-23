@@ -1,0 +1,2361 @@
+<template>
+	<div :class="{ 'narrow': currentSlide > 0, 'card-width': isFirstInstall, '_stepStoreList': currentSlide === 0 }"
+		class="modal-card">
+		<!--    first setting！！ apps installation location -->
+		<template v-if="isFirstInstall">
+			<header class="modal-card-head b-line">
+				<div class="is-flex-grow-1">
+					<h3 class="is-flex-grow-1 title is-3 pri-line-height has-text-black">
+						{{ $t('Apps Installation Location') }}
+					</h3>
+				</div>
+				<b-icon class="close-button"
+					icon="close-outline"
+					pack="casa"
+					@click="
+						$emit('close');
+						$messageBus('appstore_close')
+					" />
+			</header>
+			<p class="modal-card-body">
+				{{ $t('Please choose a location with enough storage space and stable connection.') }}
+				<span class="has-text-danger">
+					{{ $t('(Cannot be changed)') }}
+				</span>
+			</p>
+
+			<section class="modal-card-body is-overlay">
+				<AppsInstallationLocation v-for="(item, index) in storageData"
+					:key="`storage${index}`"
+					:item="item"
+					:scence="storage_item_scence"
+					@selection="getSelection" />
+			</section>
+		</template>
+		<!--    first setting have done!! -->
+		<template v-else>
+			<!-- Sidebar Start -->
+			<AppSideBar v-model="sidebarOpen" :overlay="true" :right="true" position="absolute">
+				<template #default="{ close }">
+					<AppDetailInfo :app-detail-data="appDetailData"
+						:arch="arch"
+						:cate-menu="cateMenu"
+						:close="close"
+						:current-install-id="currentInstallId"
+						:installed-list="installedList"
+						:show-detail-swiper="showDetailSwiper"
+						@install="quickInstall"
+						@switchAppConfigContent="switchAppConfigContent" />
+				</template>
+			</AppSideBar>
+			<!-- Sidebar End -->
+
+			<!-- Modal-Card Header Start -->
+			<header :class="{ 'setting-compose-panel': currentSlide == 1 && isCasa }" class="modal-card-head _b-line">
+				<div class="is-flex-grow-1">
+					<h3 class="setting_title is-5">
+						{{ panelTitle }}
+					</h3>
+				</div>
+				<div class="is-flex is-align-items-center">
+					<b-button v-if="currentSlide == 0 && canWrite"
+						:label="$t('Custom Install')"
+						class="mr-2"
+						icon-left="view-grid-plus"
+						rounded
+						size="is-small"
+						type="is-primary"
+						@click="currentSlide = 1" />
+
+					<b-tooltip v-if="showImportButton" :label="$t('Import')" position="is-bottom" type="is-dark">
+						<button class="icon-button mdi mdi-import" type="button" @click="showImportPanel"></button>
+					</b-tooltip>
+
+					<b-tooltip v-if="showTerminalButton && canWrite"
+						:label="$t('Terminal & Logs')"
+						position="is-bottom"
+						type="is-dark">
+						<button class="icon-button mdi mdi-console" type="button" @click="showTerminalPanel()"></button>
+					</b-tooltip>
+
+					<b-tooltip v-if="showExportButton"
+						:label="$t('Export ComposeFile')"
+						position="is-bottom"
+						type="is-dark">
+						<button class="icon-button mdi mdi-export-variant" type="button" @click="exportYAML"></button>
+					</b-tooltip>
+					<div v-if="currentSlide < 2"
+						class="is-flex is-align-items-center modal-close-container modal-close-container-line">
+						<NewTabButton v-if="state === 'install' && currentSlide === 0"
+							:params="{ store: sidebarOpen ? appDetailData.id : '' }" class="mr-2" page="appstore" />
+						<b-icon class="close-button" icon="close-outline" pack="casa" @click="requestClose" />
+					</div>
+					<div v-else-if="currentSlide === 2" class="is-flex is-align-items-center">
+						<b-icon class="close-button" icon="close-outline" pack="casa" @click="requestClose" />
+					</div>
+				</div>
+			</header>
+			<!-- Modal-Card Header End -->
+			<!-- Modal-Card Body Start -->
+			<!-- App Store List Start -->
+			<section v-if="currentSlide == 0" :class="{ _hideOverflow: !isCasa }" class="modal-card-body pt-3 _pl">
+				<template v-if="!isLoadError">
+					<template v-if="recommendList.length > 0">
+						<h3 class="title is-5 has-text-weight-normal">
+							{{ $t('Featured Apps') }}
+						</h3>
+						<!-- Featured Slider Start -->
+						<div class="is-relative featured-app b-line">
+							<Swiper v-bind="featureSwiperOptions">
+								<SwiperSlide v-for="(item, index) in recommendList"
+									:key="index + item.title + item.id"
+									class="pb-5">
+									<div class="gap" @click="showAppDetial(item.id)">
+										<b-image :placeholder="require('@/assets/img/app/swiper_placeholder.png')"
+											:src="item.thumbnail"
+											:src-fallback="require('@/assets/img/app/swiper_placeholder.png')"
+											class="border-8 is-clickable"
+											ratio="16by9" />
+									</div>
+									<div class="is-flex pt-5 is-align-items-center">
+										<div class="mr-3" @click="showAppDetial(item.id)">
+											<b-image :placeholder="require('@/assets/img/app/default.svg')"
+												:src="item.icon"
+												:src-fallback="require('@/assets/img/app/default.svg')"
+												class="is-64x64 is-clickable icon-shadow" />
+										</div>
+										<div class="is-flex-grow-1 mr-4 is-clickable"
+											@click="
+												showAppDetial(item.id);
+												$messageBus('appstore_detail', item.title)
+											">
+											<h6 class="title is-6 mb-2">
+												{{ item.title }}
+											</h6>
+											<p class="is-size-7 two-line">
+												{{ item.tagline }}
+											</p>
+										</div>
+										<div>
+											<b-button v-if="installedList.includes(item.id)"
+												:loading="item.id == currentInstallId"
+												rounded
+												size="is-small"
+												type="is-primary is-light"
+												@click="openThirdContainerByAppInfo(item)">
+												{{ $t('launch-and-open') }}
+											</b-button>
+											<b-button v-else-if="canWrite"
+												:disabled="!item.architectures?.includes(arch)"
+												:loading="item.id == currentInstallId"
+												rounded
+												size="is-small"
+												type="is-primary is-light"
+												@click="
+													quickInstall(item.id);
+													$messageBus('appstore_install', item.title)
+												">
+												{{ $t('Install') }}
+											</b-button>
+										</div>
+									</div>
+								</SwiperSlide>
+							</Swiper>
+							<div class="swiper-button-prev" @click="$messageBus('appstore_slide')"></div>
+							<div class="swiper-button-next" @click="$messageBus('appstore_slide')"></div>
+						</div>
+					</template>
+					<!-- Featured Slider End -->
+
+					<!-- List condition Start -->
+					<div class="is-flex mt-5 mb-5 is-justify-content-center">
+						<!-- Cate Start -->
+						<transition name="slide-fade">
+							<div v-if="!activeAppStoreSourceInput || !isMobile"
+								class="mr-2 hover-effect is-flex is-align-items-center _dropdown is-clickable">
+								<b-dropdown v-model="currentCate"
+									:max-height="240"
+									:mobile-modal="false"
+									animation="fade1"
+									aria-role="list"
+									class="app-select file-dropdown"
+									scrollable>
+									<template #trigger="{ active }">
+										<b-button :label="currentCate.name"
+											type="is-text"
+											icon-left="category"
+											icon-pack="casa"
+											:icon-right="active ? 'up-outline' : 'down-outline'" />
+									</template>
+									<b-dropdown-item v-for="menu in cateMenu"
+										:key="menu.id"
+										:class="menu.id == currentCate.id ? 'is-active' : ''"
+										:data-title="menu.count"
+										:value="menu"
+										aria-role="listitem"
+										class="_dropdown__item">
+										<div class="media is-align-items-center is-flex has-text-full-03"
+											@click="$messageBus('appstore_type', menu.name)">
+											<div class="media-content">
+												<h3>{{ menu.name }}</h3>
+											</div>
+										</div>
+									</b-dropdown-item>
+								</b-dropdown>
+							</div>
+						</transition>
+						<!-- Cate End -->
+
+						<!-- Author Start -->
+						<transition name="slide-fade">
+							<div v-if="!activeAppStoreSourceInput || !isMobile"
+								class="hover-effect is-flex is-align-items-center _dropdown is-clickable">
+								<b-dropdown v-model="currentAuthor"
+									:max-height="240"
+									:mobile-modal="false"
+									animation="fade1"
+									aria-role="list"
+									class="app-select file-dropdown"
+									position="is-bottom-right"
+									scrollable>
+									<template #trigger="{ active }">
+										<b-button :label="currentAuthor.name"
+											type="is-text"
+											icon-left="posted-by"
+											icon-pack="casa"
+											:icon-right="active ? 'up-outline' : 'down-outline'" />
+									</template>
+									<b-dropdown-item v-for="menu in authorMenu"
+										:key="menu.id"
+										:class="menu.id == currentAuthor.id ? 'is-active' : ''"
+										:data-title="menu.count"
+										:value="menu"
+										aria-role="listitem"
+										class="_dropdown__item">
+										<div class="media is-align-items-center is-flex has-text-full-03"
+											@click="$messageBus('appstore_author', menu.name)">
+											<div class="media-content">
+												<h3>{{ menu.name }}</h3>
+											</div>
+										</div>
+									</b-dropdown-item>
+								</b-dropdown>
+							</div>
+						</transition>
+						<!-- Author End -->
+
+						<transition name="search-fade">
+							<b-icon v-if="searchAndSourcesStatus === 'showSources'"
+								class="is-flex is-align-self-center ml-2 is-clickable"
+								icon="search-outline"
+								pack="casa"
+								@click="searchAndSourcesStatusController" />
+						</transition>
+						<transition name="search-fade">
+							<b-input v-if="searchAndSourcesStatus !== 'showSources'"
+								ref="search_app"
+								v-on-click-outside="resetSearchAndSourcesStatus"
+								:placeholder="$t('Search an app...')"
+								class="app-search ml-2"
+								@update:model-value="debounceSearchInput"
+								@keyup.enter="counterPatchGetStoreList++" />
+						</transition>
+						<div class="is-flex-grow-1"></div>
+						<AppStoreSourceManagement v-if="canWrite"
+							v-show="searchAndSourcesStatus !== 'showSearch'"
+							:total-apps="pageList.length"
+							class="ml-2"
+							@refreshAppStore="getStoreList"
+							@refreshSize="refreshAppStoreSourceManagementSizeStatus" />
+					</div>
+
+					<!-- List condition End -->
+					<!-- App list Start -->
+					<div class="columns f-list is-multiline is-mobile pb-3 mb-5">
+						<div v-for="(item, index) in filteredPageList"
+							:key="index + item.title + item.id"
+							class="column app-item is-one-quarter">
+							<div class="is-flex">
+								<div class="mr-4 is-clickable" @click="showAppDetial(item.id)">
+									<b-image :src="item.icon"
+										:src-fallback="require('@/assets/img/app/default.svg')"
+										class="is-64x64 icon-shadow"
+										style="display: flex; align-items: center"
+										webp-fallback=".jpg" />
+								</div>
+								<div class="is-flex-grow-1 mr-4 is-clickable"
+									@click="
+										showAppDetial(item.id);
+										$messageBus('appstore_detail', item.title)
+									">
+									<h6 class="title is-6 mb-2">
+										{{ item.title }}
+									</h6>
+									<p class="is-size-7 two-line">
+										{{ item.tagline }}
+									</p>
+								</div>
+							</div>
+							<div class="mt-1 ml-7 is-flex is-align-items-center">
+								<div class="is-flex-grow-1 is-size-7 has-text-grey-light">
+									{{ item.category }}
+								</div>
+								<b-button v-if="installedList.includes(item.id)"
+									:loading="item.id == currentInstallId"
+									rounded
+									size="is-small"
+									type="is-primary is-light"
+									@click="openThirdContainerByAppInfo(item)">
+									{{ $t('launch-and-open') }}
+								</b-button>
+								<b-button v-else-if="canWrite"
+									:disabled="!item.architectures?.includes(arch)"
+									:loading="item.id == currentInstallId"
+									rounded
+									size="is-small"
+									type="is-primary is-light"
+									@click="
+										quickInstall(item.id);
+										$messageBus('appstore_install', item.title)
+									">
+									{{ $t('Install') }}
+								</b-button>
+							</div>
+						</div>
+					</div>
+
+					<!-- App list End -->
+
+					<!-- Community App List Start -->
+					<template v-if="communityList.length > 0">
+						<h3 class="title is-5 has-text-weight-normal">
+							{{ $t('Community Apps') }}
+						</h3>
+						<h3 class="subtitle is-7 has-text-grey-light">
+							{{
+								$t(
+									'From community contributors, not optimized for CasaOS, but provides a basic App nexperience.',
+								)
+							}}
+						</h3>
+
+						<div class="columns f-list is-multiline is-mobile pb-3 mb-5">
+							<div v-for="(item, index) in communityList"
+								:key="index + item.title + item.id"
+								class="column is-one-quarter">
+								<div class="is-flex is-align-items-center">
+									<div class="mr-4 is-clickable" @click="showAppDetial(item.id)">
+										<b-image :src="item.icon"
+											:src-fallback="require('@/assets/img/app/default.svg')"
+											class="is-64x64 icon-shadow"
+											webp-fallback=".jpg" />
+									</div>
+									<div class="is-flex-grow-1 mr-4 is-clickable"
+										@click="
+											showAppDetial(item.id);
+											$messageBus('appstorecommunity_detail', item.title)
+										">
+										<h6 class="title is-6 mb-2">
+											{{ item.title }}
+										</h6>
+										<p class="is-size-7 two-line">
+											{{ item.tagline }}
+										</p>
+									</div>
+								</div>
+								<div class="mt-1 ml-7 is-flex is-align-items-center">
+									<div class="is-flex-grow-1 is-size-7 has-text-grey-light">
+										{{ item.category }}
+									</div>
+									<b-button v-if="installedList.includes(item.id)"
+										:loading="item.id == currentInstallId"
+										rounded
+										size="is-small"
+										type="is-primary is-light"
+										@click="openThirdContainerByAppInfo(item)">
+										{{ $t('launch-and-open') }}
+									</b-button>
+									<b-button v-else-if="canWrite"
+										:disabled="!item.architectures?.includes(arch)"
+										:loading="item.id == currentInstallId"
+										rounded
+										size="is-small"
+										type="is-primary is-light"
+										@click="
+											quickInstall(item.id);
+											$messageBus('appstorecommunity_install', item.title)
+										">
+										{{ $t('Install') }}
+									</b-button>
+								</div>
+							</div>
+						</div>
+					</template>
+
+					<!-- Community App List End -->
+				</template>
+				<template v-else>
+					<div class="is-flex is-align-items-center is-justify-content-center mt-6 mb-6">
+						<div class="has-text-centered mt-6 mb-6">
+							<div class="is-flex is-align-items-center mb-5">
+								<b-icon class="mr-2" icon="alert-circle-outline" pack="casa" type="is-danger" />
+								{{ $t('There was an error loading the data, please try again!') }}
+							</div>
+
+							<b-button rounded type="is-primary" @click="retry()">
+								Retry
+							</b-button>
+						</div>
+					</div>
+				</template>
+			</section>
+			<!-- App Store List End -->
+
+			<!-- App Install Form Start -->
+			<template v-if="currentSlide == 1">
+				<!-- Settings / raw Compose switch, on installed CasaOS apps only -->
+				<div v-if="isCasa && state == 'update' && !repositoryOnly" class="is-flex is-flex-wrap-wrap is-gap-1 px-4 pt-3 compose-mode-switch">
+					<b-button :type="editorTab === 'settings' ? 'is-primary' : 'is-text'"
+						rounded
+						size="is-small"
+						@click="setEditorTab('settings')">
+						{{ $t('Settings') }}
+					</b-button>
+					<b-button :type="editorTab === 'compose' ? 'is-primary' : 'is-text'"
+						rounded
+						size="is-small"
+						@click="setEditorTab('compose')">
+						{{ $t('Compose') }}
+					</b-button>
+					<b-button :type="editorTab === 'env' ? 'is-primary' : 'is-text'"
+						rounded
+						size="is-small"
+						@click="setEditorTab('env')">
+						{{ $t('Environment') }}
+					</b-button>
+					<b-button v-if="isAdmin"
+						:type="editorTab === 'visibility' ? 'is-primary' : 'is-text'"
+						rounded
+						size="is-small"
+						@click="setEditorTab('visibility')">
+						{{ $t('Visibility') }}
+					</b-button>
+					<b-button :type="editorTab === 'containers' ? 'is-primary' : 'is-text'"
+						rounded
+						size="is-small"
+						@click="setEditorTab('containers')">
+						{{ $t('Containers') }}
+					</b-button>
+					<!-- a git app, or a compose app whose folder is a git work tree -->
+					<b-button v-if="gitApp"
+						:type="editorTab === 'repository' ? 'is-primary' : 'is-text'"
+						rounded
+						size="is-small"
+						@click="setEditorTab('repository')">
+						{{ $t('Repository') }}
+					</b-button>
+				</div>
+
+				<!-- A git or adoptable app is its repository: an edit here would modify
+					tracked files, and modified tracked files refuse every later deployment. -->
+				<div v-if="gitNotice" class="px-4 pt-3 git-notice">
+					<b-message class="mb-0" size="is-small" type="is-info">
+						{{ $t('This app is defined by its git repository: change it there. An edit here would modify tracked files and block every later deployment.') }}
+						<a href="#" @click.prevent="setEditorTab('repository')">{{ $t('Open the Repository tab') }}</a>
+					</b-message>
+				</div>
+
+				<GitRepoTab v-if="gitApp && editorTab === 'repository'"
+					:app-id="id"
+					:git-app="gitApp"
+					@change="gitApp = $event" />
+
+				<AppVisibility v-if="isCasa && state == 'update' && editorTab === 'visibility'" :app-id="id" @state="onEditorState" />
+
+				<ContainersTab v-if="isCasa && state == 'update' && editorTab === 'containers'"
+					:app-id="id"
+					:can-edit-compose="!gitApp"
+					@compose="setEditorTab('compose')"
+					@open="openServicePanel" />
+
+				<ComposeEditor v-if="isCasa && state == 'update' && editorTab === 'compose' && !gitApp"
+					ref="composeEditor"
+					:app-id="id"
+					:value="dockerComposeConfig"
+					@applied="onComposeApplied"
+					@state="onEditorState" />
+
+				<template v-if="isCasa && state === 'update' && editorTab === 'env'">
+					<EnvEditor v-if="envLoaded"
+						ref="envEditor"
+						:app-id="id"
+						:readonly="envTracked"
+						:value="envText"
+						@applied="onEnvApplied"
+						@state="onEditorState" />
+
+					<section v-else class="modal-card-body is-relative" style="min-height: 10rem">
+						<b-message v-if="envError" size="is-small" type="is-danger">
+							{{ envError }}
+						</b-message>
+						<b-loading v-else :is-full-page="false" :model-value="envLoading" />
+					</section>
+				</template>
+
+				<!-- still mounted for a git or adoptable app, hidden: it names the service
+					the terminal opens on and the app the title shows -->
+				<ComposeConfig v-if="isCasa && editorTab === 'settings'"
+					v-show="!gitApp"
+					ref="ComposeConfig"
+					:cap-array="capArray"
+					:docker-compose-commands="dockerComposeConfig"
+					:err-info="errInfo"
+					:networks="networks"
+					:newer-tags="newerTags"
+					:state="state"
+					:total-memory="totalMemory"
+					@updateDockerComposeCommands="updateDockerComposeCommands"
+					@updateDockerComposeServiceName="updateDockerComposeServiceName"
+					@updateMainName="name => (currentInstallId = name)" />
+
+				<section v-else-if="!isCasa && editorTab === 'settings'" :class="{ _hideOverflow: !isCasa }" class="modal-card-body pt-3">
+					<!--	导入"已存在的容器"，进行初始化操作	-->
+					<VeeForm ref="containerValida" as="span">
+						<VeeField v-slot="{ errors, meta }" :model-value="settingData.label" name="appName" rules="required">
+							<b-field :label="`${$t('App name')} *`"
+								:message="errors"
+								:type="{ 'is-danger': errors[0], 'is-success': meta.valid }">
+								<b-input v-model="settingData.label"
+									:placeholder="$t('Your custom App Name')"
+									maxlength="40" />
+							</b-field>
+						</VeeField>
+
+						<b-field :label="$t('Icon URL')">
+							<p class="control">
+								<span class="button is-static container-icon">
+									<b-image :key="settingData.icon"
+										:src="settingData.icon"
+										:src-fallback="require('@/assets/img/app/default.svg')"
+										class="is-32x32"
+										ratio="1by1" />
+								</span>
+							</p>
+							<b-input v-model="settingData.icon"
+								:placeholder="$t('Your custom icon URL')"
+								expanded />
+						</b-field>
+
+						<b-field label="Web UI">
+							<b-select v-model="settingData.protocol">
+								<option value="http">
+									http://
+								</option>
+								<option value="https">
+									https://
+								</option>
+							</b-select>
+							<b-input v-model="settingData.host" :placeholder="$baseHostname" expanded />
+							<b-autocomplete v-model="settingData.port_map"
+								:data="
+									(() => {
+										return (settingData.ports || []).map(item => {
+											return item.host
+										})
+									})()
+								"
+								:open-on-focus="true"
+								:placeholder="$t('Port')"
+								class="has-colon"
+								field="hostname"
+								@select="option => (settingData.port_map = option)" />
+							<b-input v-model="settingData.index"
+								:placeholder="`/index.html ${$t('[Optional]')}`"
+								expanded />
+						</b-field>
+					</VeeForm>
+				</section>
+			</template>
+			<!-- App Install Form End -->
+
+			<!-- App Install Process Start -->
+			<section v-if="currentSlide == 2" :class="{ _hideOverflow: !isCasa }" class="modal-card-body pt-3 _b-line">
+				<div class="installing-warpper mb-5">
+					<div class="is-flex is-align-items-center is-justify-content-center">
+						<LottieAnimation :animation-data="require('@/assets/ani/loading.json')"
+							:auto-play="true"
+							:loop="true"
+							class="install-animation mt-5 mb-2" />
+					</div>
+					<b-progress :value="totalPercentage" format="percent" show-value type="is-primary" />
+					<h3 v-dompurify-html="currentInstallAppText"
+						:class="currentInstallAppTextClass"
+						class="title is-6 has-text-centered"
+						style="height: 20px"></h3>
+				</div>
+			</section>
+			<!-- App Install Process End -->
+			<b-loading v-model="isLoading" :can-cancel="false" :is-full-page="false" />
+			<!-- Modal-Card Body End -->
+		</template>
+		<!-- Modal-Card Footer Start -->
+		<footer :class="{ 'is-justify-content-center': currentSlide == 0 }"
+			class="modal-card-foot is-flex is-align-items-center">
+			<div class="is-flex-grow-1"></div>
+			<div>
+				<b-button v-if="currentSlide == 2 && currentInstallAppError"
+					:label="$t('Back')"
+					rounded
+					@click="prevStep" />
+				<b-button v-if="currentSlide == 1 && state == 'install'"
+					:label="$t('Install')"
+					:loading="isLoading"
+					rounded
+					type="is-primary"
+					@click="checkComposeAppAndInstallComposeApp(dockerComposeCommands, currentInstallId)" />
+				<b-button v-if="isCasa && currentSlide == 1 && state == 'update' && editorTab === 'settings' && !gitApp"
+					:label="$t('Save')"
+					:loading="isLoading"
+					rounded
+					type="is-primary"
+					@click="updateApp()" />
+				<b-button v-if="isCasa && currentSlide == 1 && state == 'update' && ((editorTab === 'compose' && !gitApp) || (editorTab === 'env' && !envTracked))"
+					:disabled="!editorState.canApply"
+					:label="$t('Apply')"
+					:loading="editorState.isApplying"
+					rounded
+					type="is-primary"
+					@click="$refs[`${editorTab}Editor`].apply()" />
+				<b-button v-if="!isCasa && currentSlide == 1 && state == 'update'"
+					:label="$t('Save')"
+					:loading="isLoading"
+					rounded
+					type="is-primary"
+					@click="updateContainer()" />
+				<b-button v-if="currentSlide == 2 && !currentInstallAppError"
+					:label="$t(cancelButtonText)"
+					rounded
+					type="is-primary"
+					@click="$emit('close')" />
+				<b-button v-if="isFirstInstall"
+					:label="$t('Submit')"
+					:loading="isLoading"
+					rounded
+					type="is-primary"
+					@click="submitInstallationLocation(installationLocation)" />
+			</div>
+		</footer>
+		<!-- Modal-Card Footer End -->
+	</div>
+</template>
+
+<script>
+import { defineAsyncComponent } from 'vue'
+import LottieAnimation from 'lottie-web-vue'
+import uniq from 'lodash/uniq'
+import isNull from 'lodash/isNull'
+import orderBy from 'lodash/orderBy'
+import debounce from 'lodash/debounce'
+import FileSaver from 'file-saver'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import { Navigation } from 'swiper/modules'
+import { Field as VeeField, Form as VeeForm } from 'vee-validate'
+import { parse } from 'yaml'
+import { vOnClickOutside } from '@vueuse/components'
+import escape from 'lodash/escape'
+import ImportPanel from '../forms/ImportPanel.vue'
+import { withInstallEnv } from '../forms/installEnv'
+import AppSideBar from './AppSideBar.vue'
+import AppTerminalPanel from './AppTerminalPanel.vue'
+import AppStoreSourceManagement from '@/components/Apps/AppStoreSourceManagement.vue'
+import { ice_i18n } from '@/mixins/base/common-i18n'
+import { categoryMenu } from '@/mixins/app/appStoreCategories'
+import AppDetailInfo from '@/components/Apps/AppDetailInfo.vue'
+import ComposeConfig from '@/components/Apps/ComposeConfig.vue'
+import ComposeEditor from '@/components/Apps/ComposeEditor.vue'
+import EnvEditor from '@/components/Apps/EnvEditor.vue'
+import ContainersTab from '@/components/Apps/ContainersTab.vue'
+import GitRepoTab from '@/components/Apps/GitRepoTab.vue'
+import { pickContainerId } from '@/components/Apps/containerSummary'
+import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
+import business_ShowNewAppTag from '@/mixins/app/Business_ShowNewAppTag'
+import AppsInstallationLocation from '@/components/Apps/AppsInstallationLocation'
+import NewTabButton from '@/components/basicComponents/NewTabButton.vue'
+
+const data = [
+	'AUDIT_CONTROL',
+	'AUDIT_READ',
+	'BLOCK_SUSPEND',
+	'BPF',
+	'CHECKPOINT_RESTORE',
+	'DAC_READ_SEARCH',
+	'IPC_LOCK',
+	'IPC_OWNER',
+	'LEASE',
+	'LINUX_IMMUTABLE',
+	'MAC_ADMIN',
+	'MAC_OVERRIDE',
+	'NET_ADMIN',
+	'NET_BROADCAST',
+	'PERFMON',
+	'SYS_ADMIN',
+	'SYS_BOOT',
+	'SYS_MODULE',
+	'SYS_NICE',
+	'SYS_PACCT',
+	'SYS_PTRACE',
+	'SYS_RAWIO',
+	'SYS_RESOURCE',
+	'SYS_TIME',
+	'SYS_TTY_CONFIG',
+	'SYSLOG',
+	'WAKE_ALARM',
+]
+
+export default {
+	components: {
+		NewTabButton,
+		AppStoreSourceManagement,
+		AppVisibility: defineAsyncComponent(() => import('@/components/Apps/AppVisibility.vue')),
+		AppDetailInfo,
+		AppSideBar,
+		LottieAnimation,
+		Swiper,
+		SwiperSlide,
+		AppsInstallationLocation,
+		ComposeConfig,
+		ComposeEditor,
+		EnvEditor,
+		ContainersTab,
+		GitRepoTab,
+		VeeField,
+		VeeForm,
+	},
+	directives: {
+		OnClickOutside: vOnClickOutside,
+	},
+	mixins: [business_ShowNewAppTag, business_OpenThirdApp],
+	props: {
+		id: String,
+		state: String,
+		// a store app to show at once, by its id in the store ('syncthing')
+		storeId: {
+			type: [Number, String],
+			default: 0,
+		},
+		isCasa: {
+			type: Boolean,
+			default: true,
+		},
+		runningStatus: String,
+		configData: Object,
+		// for import app. this.isCasa is false
+		settingData: {
+			type: Object,
+		},
+		// for compose app.
+		settingComposeData: {
+			type: String,
+		},
+		// the newer versions the box found for the app's pinned images (`newer_tags`)
+		newerTags: {
+			type: Array,
+			default: () => [],
+		},
+		// A git app no deployment has given a container: there is no compose app to
+		// set, and the panel is its Repository tab alone.
+		repositoryOnly: {
+			type: Boolean,
+			default: false,
+		},
+	},
+
+	data() {
+		return {
+			timer: 0,
+			data: [],
+			isLoading: true,
+			isFetching: false,
+			isLoadError: false,
+			loadErrorStep: 0,
+			isFirst: true,
+			errorType: 1,
+			currentInstallAppName: null,
+			// Every panel open, in any tab, hears every install on the message bus:
+			// this one follows only the install it asked for.
+			installStarted: false,
+			// the .env imported with a compose, sent with the install of the form (see installEnv.js)
+			importedEnv: '',
+			currentInstallAppError: false,
+			currentInstallAppType: null,
+			currentInstallAppText: '',
+			currentInstallAppProgress: {},
+			currentInstallAppProgressTotals: {},
+
+			sidebarOpen: false,
+			cancelButtonText: 'Cancel',
+			totalMemory: 0,
+			networks: [],
+			tempNetworks: [],
+			networkModes: [],
+			// about @compose
+			// Assign value to compose_config component
+			dockerComposeConfig: '',
+			capArray: data,
+			errInfo: {},
+			dockerComposeCommands: '',
+			// 'settings' | 'compose' | 'env' | 'containers' | 'repository'; compose
+			// and env mount an editor whose state the footer Apply button reads.
+			editorTab: this.repositoryOnly ? 'repository' : 'settings',
+			// the GitApp of a git or adoptable app, null for any other app
+			gitApp: null,
+			editorState: { canApply: false, isApplying: false, isDirty: false },
+			envText: '',
+			envLoaded: false,
+			envLoading: false,
+			envError: '',
+			dockerComposeServiceName: '',
+
+			pageIndex: 1,
+			pageSize: 5,
+			listTotal: 0,
+			pageList: {},
+			communityList: {},
+			recommendList: {},
+			currentSlide: 0,
+			currentInstallId: '',
+
+			// Featured Swiper
+			featureSwiperOptions: {
+				modules: [Navigation],
+				loop: false,
+				spaceBetween: 24,
+				navigation: {
+					nextEl: '.swiper-button-next',
+					prevEl: '.swiper-button-prev',
+					disabledClass: 'swiper-button-disabled',
+				},
+				breakpoints: {
+					640: {
+						slidesPerView: 1,
+					},
+					768: {
+						slidesPerView: 2,
+					},
+					1366: {
+						slidesPerView: 3,
+					},
+				},
+				// on: {
+				// 	slideChangeTransitionStart: this.handleFeaturedSlide
+				// },
+			},
+			searchKey: '',
+			currentCate: {},
+			// currentAuthor: {},
+			currentAuthor: { count: 0, font: 'author', id: 0, name: 'All' },
+			currentSort: {},
+			cateMenu: [],
+			authorMenu: [
+				{ count: 0, font: 'author', id: 0, name: 'All' },
+				{ count: 0, font: 'author', id: 1, name: 'official' },
+				{ count: 0, font: 'author', id: 2, name: 'by_casaos' },
+				{ count: 0, font: 'author', id: 3, name: 'community' },
+			],
+			sortMenu: [
+				{ icon: '', slash: 'rank', name: 'Popular' },
+				{ icon: '', slash: 'new', name: 'New' },
+				{ icon: '', slash: 'name', name: 'Name' },
+			],
+			storeQueryData: {
+				index: 1,
+				category: 'All',
+				authorType: 'All',
+				type: 'rank',
+				key: this.searchKey,
+				pageSize: 5,
+			},
+			//  App Detail info
+			appDetailData: {
+				title: { en_us: '' },
+				tagline: { en_us: '' },
+				description: { en_us: '' },
+			},
+			arch: '',
+			// unusable: false, // computer unusable
+			architectures: [],
+
+			// APPs Installation Location - requirement document
+			storageData: [
+				{
+					name: 12,
+					isSystem: true,
+					fsType: 'fsType',
+					diskName: 'diakname',
+					availSize: '1024',
+					disk_type: 'type',
+					path: 'path',
+					mount_point: 'mount_point',
+					usePercent: 20,
+					model: 'model',
+					size: 123,
+					health: true,
+					temperature: 100,
+				},
+			],
+			storage_item_scence: 'select installation location',
+			isFirstInstall: false,
+			installationLocation: '',
+			totalPercentage: 0,
+			installedList: [],
+			counterPatchGetStoreList: 0,
+			searchAndSourcesStatus: '',
+			activeAppStoreSourceInput: false,
+		}
+	},
+
+	computed: {
+		isAdmin() {
+			return this.$store.getters.isAdmin
+		},
+		canWrite() {
+			return this.$store.getters.canWrite
+		},
+		showImportButton() {
+			return this.currentSlide == 1 && this.state == 'install'
+		},
+		showExportButton() {
+			return this.currentSlide == 1 && this.state == 'update' && !this.repositoryOnly
+		},
+		showTerminalButton() {
+			return this.currentSlide == 1 && this.state == 'update' && this.runningStatus == 'running'
+		},
+		panelTitle() {
+			if (this.currentSlide == 0) {
+				return this.$t('App Store')
+			} else if (this.currentSlide == 1) {
+				if (!this.isCasa) {
+					return `${this.$t('Import')} ${this.currentInstallId}`
+				} else {
+					return this.settingData != undefined || this.settingComposeData != undefined
+						? `${this.currentInstallId} ${this.$t('Setting')}`
+						: this.$t('Install a new App manually')
+				}
+			} else {
+				return `${this.$t('Installing')} ${this.currentInstallId}`
+			}
+		},
+		showDetailSwiper() {
+			return this.appDetailData.screenshot_link?.length > 0
+		},
+		currentInstallAppTextClass() {
+			return this.currentInstallAppError ? 'has-text-danger' : 'has-text-black'
+		},
+		unuseable() {
+			if (this.architectures.length === 0 || !this.arch) {
+				return false
+			}
+			return !this.architectures.includes(this.arch)
+		},
+		archTitle() {
+			if (this.arch === 'arm') {
+				return 'armv7'
+			}
+			return this.arch
+		},
+		filteredPageList() {
+			if (Object.keys(this.pageList).length === 0)
+				return []
+			return this.pageList.filter((app) => {
+				const keywords = (app.title + app.tagline)?.toLocaleLowerCase() ?? ''
+				for (const term of this.searchKey.split(' ')) {
+					if (keywords.includes(term.toLocaleLowerCase())) {
+						return true
+					}
+				}
+				return false
+			})
+		},
+		isMobile() {
+			return this.$store.state.isMobile
+		},
+		// A git app or an adoptable one alike: its repository defines it.
+		envTracked() {
+			return Boolean(this.gitApp && this.gitApp.env_tracked)
+		},
+		gitNotice() {
+			return Boolean(this.gitApp) && (this.editorTab === 'settings' || this.editorTab === 'compose' || (this.editorTab === 'env' && this.envTracked))
+		},
+	},
+	watch: {
+		// Watch if Section index changes
+		/*
+		 *  === 0 App Store Panel.
+		 *  === 1 Setting Panel.	(Importing、Update Setting)
+		 *  === 2 Other Panel. (Installing)
+		 * */
+		currentSlide(val) {
+			if (val == 1) {
+				this.isLoading = false
+			}
+		},
+		currentCate: {
+			handler() {
+				if (!this.isFirst) {
+					this.counterPatchGetStoreList++
+				}
+			},
+			deep: true,
+		},
+		currentAuthor: {
+			handler() {
+				if (!this.isFirst) {
+					this.counterPatchGetStoreList++
+				}
+			},
+			deep: true,
+		},
+		// Watch if app sort changes
+		currentSort: {
+			handler() {
+				if (!this.isFirst) {
+					this.counterPatchGetStoreList++
+				}
+			},
+			deep: true,
+		},
+		counterPatchGetStoreList() {
+			this.getStoreList()
+			return 0
+		},
+	},
+
+	created() {
+		window.addEventListener('resize', this.setCSSVHVar)
+		this.setCSSVHVar()
+
+		// Get recommend
+		this.getStoreRecommend()
+
+		// Get Max memory info form device
+		this.totalMemory = Math.floor(this.configData.memory.total / 1048576)
+
+		// Handling network types
+		this.tempNetworks = this.configData.networks
+		this.networkModes = uniq(
+			this.tempNetworks.map((item) => {
+				return item.driver
+			}),
+		)
+		this.networks = this.networkModes.map((item) => {
+			const tempitem = {}
+			tempitem.driver = item
+			tempitem.networks = this.tempNetworks.filter((net) => {
+				return net.driver == item
+			})
+			return tempitem
+		})
+		this.networks = orderBy(this.networks, ['driver'], ['asc'])
+		// If it is edit, Init data
+		if (this.settingData != undefined || this.settingComposeData != undefined) {
+			this.isLoading = false
+			this.dockerComposeConfig = this.settingComposeData
+			this.currentSlide = 1
+		} else {
+			this.getCategoryList()
+		}
+
+		if (this.isCasa && this.state === 'update') {
+			this.loadGitApp()
+		}
+		// no Settings form here to name the app in the title
+		if (this.repositoryOnly) {
+			this.currentInstallId = this.id
+		}
+
+		// If StoreId is not 0
+		if (this.storeId != 0) {
+			this.showAppDetial(this.storeId)
+		}
+
+		// 这是 选择应用安装位置。 这块功能不被使用，暂且保留。
+		// close the function - APPs Installation Location
+		// prepare data - APPs Installation Location requirement document
+		// this.getDiskList();
+		// close the function - APPs Installation Location
+		// this.askInstallationLocation();
+
+		// get architecture
+		this.arch = localStorage.getItem('arch')
+		if (!this.arch) {
+			this.$api.sys.hardwareInfo().then((res) => {
+				if (res.data.success == 200) {
+					localStorage.setItem('arch', res.data.data.arch || '')
+					this.arch = res.data.data.arch || ''
+				}
+			})
+		}
+	},
+
+	mounted() {
+		document.addEventListener('keyup', this.onEscape)
+		this.currentSlide === 0
+		&& !this.isMobile
+		&& this.$nextTick().then(() => {
+			this.$refs.search_app.$el.children[0].focus()
+		})
+		this.searchAndSourcesStatusController()
+	},
+	methods: {
+		resetSearchAndSourcesStatus() {
+			switch (this.isMobile) {
+				case true:
+					this.searchAndSourcesStatus = 'showSources'
+					break
+				case false:
+					this.searchAndSourcesStatus = 'showAll'
+					break
+			}
+		},
+		searchAndSourcesStatusController() {
+			// Status for three. One of them is "showSearch", "showSources", "showAll"
+			if (this.isMobile && this.searchAndSourcesStatus === 'showSources') {
+				this.searchAndSourcesStatus = 'showSearch'
+			} else if (this.isMobile) {
+				this.searchAndSourcesStatus = 'showSources'
+			} else {
+				this.searchAndSourcesStatus = 'showAll'
+			}
+		},
+
+		refreshAppStoreSourceManagementSizeStatus(status) {
+			if (status === 'active_input_state') {
+				this.activeAppStoreSourceInput = true
+			} else {
+				this.activeAppStoreSourceInput = false
+			}
+		},
+
+		setCSSVHVar() {
+			const vh = window.innerHeight * 0.01
+			document.documentElement.style.setProperty('--vh', `${vh}px`)
+		},
+
+		// this.cateMenu : {name: 'appstore', title: 'App Store', icon: 'mdi-apps', component: 'AppStore'}
+		// param : this.cateMenu.name
+		getCateIcon(name) {
+			const tempO = this.cateMenu.find(item => item.name == name) || { font: 'mdi-apps' }
+			return tempO.font
+		},
+
+		/**
+		 * @description: Get category list
+		 * @param {*}
+		 * @return {*} void
+		 */
+		async getCategoryList() {
+			this.isLoading = true
+			try {
+				const { menu, current } = categoryMenu(
+					await this.$openAPI.appManagement.appStore.categoryList().then(res => res.data.data),
+				)
+				this.cateMenu = menu
+				this.currentCate = current
+				this.currentSort = this.sortMenu[0]
+				if (this.isFirst) {
+					this.isFirst = false
+				}
+			} catch {
+				this.loadErrorStep = 1
+				this.isLoading = false
+				this.isLoadError = true
+			}
+		},
+
+		async getStoreRecommend() {
+			try {
+				const res = await this.$openAPI.appManagement.appStore
+					.composeAppStoreInfoList(undefined, undefined, true)
+					.then(res => res.data.data.list)
+
+				this.recommendList = Object.keys(res).map((id) => {
+					const main_app_info = res[id]
+					return {
+						id,
+						category: main_app_info.category,
+						icon: main_app_info.icon,
+						tagline: ice_i18n(main_app_info.tagline),
+						thumbnail: main_app_info.thumbnail || main_app_info.screenshot_link?.[0],
+						title: ice_i18n(main_app_info.title),
+						state: 0,
+						architectures: main_app_info.architectures,
+						// scheme: main_app_info.apps[id].scheme,
+						// port: main_app_info.apps[id].port_map,
+						// index: main_app_info.apps[id].index,
+					}
+				})
+			} catch (error) {
+				console.log('load recommend error', error)
+			}
+		},
+
+		/**
+		 * @description: Get App store list
+		 * @param {*}
+		 * @return {*} void
+		 */
+		async getStoreList() {
+			this.isLoading = true
+
+			try {
+				const category = this.currentCate.name
+				const authorType = this.currentAuthor.name
+				let res
+				if (authorType !== 'All' && category !== 'All') {
+					res = await this.$openAPI.appManagement.appStore
+						.composeAppStoreInfoList(category, authorType)
+						.then(res => res.data.data)
+				} else if (authorType !== 'All') {
+					res = await this.$openAPI.appManagement.appStore
+						.composeAppStoreInfoList(undefined, authorType)
+						.then(res => res.data.data)
+				} else if (category !== 'All') {
+					res = await this.$openAPI.appManagement.appStore
+						.composeAppStoreInfoList(category, undefined, false)
+						.then(res => res.data.data)
+				} else {
+					res = await this.$openAPI.appManagement.appStore
+						.composeAppStoreInfoList()
+						.then(res => res.data.data)
+				}
+
+				const list = res.list
+				const listRes = Object.keys(list).map((id) => {
+					const main_app_info = list[id]
+					return {
+						id,
+						category: main_app_info.category,
+						icon: main_app_info.icon,
+						tagline: ice_i18n(main_app_info.tagline),
+						thumbnail: main_app_info.thumbnail || main_app_info.screenshot_link?.[0],
+						title: ice_i18n(main_app_info.title),
+						state: 0,
+						architectures: main_app_info.architectures,
+						// scheme: main_app_info.apps[id].scheme,
+						// port: main_app_info.apps[id].port_map,
+						// index: main_app_info.apps[id].index,
+					}
+				})
+				this.pageList = listRes
+				this.installedList = res.installed
+			} catch (e) {
+				console.log('load store list error', e)
+			}
+			this.isLoading = false
+		},
+
+		/**
+		 * @description: Show the details of app
+		 * @param {id} String
+		 * @return {*} void
+		 */
+		async showAppDetial(id) {
+			this.isLoading = true
+			let { min_memory, compose } = await this.$openAPI.appManagement.appStore.composeApp(id).then((res) => {
+				// A district that is reserved for resource.
+				return {
+					min_memory: res.data.data.compose.services[id]?.deploy?.resources?.reservations?.memory || '0',
+					compose: res.data.data.compose,
+				}
+			})
+
+			if (min_memory.includes('GB')) {
+				min_memory = min_memory.replace('GB', '') * 1024
+			} else if (min_memory.includes('MB')) {
+				min_memory = min_memory.replace('MB', '')
+			} else {
+				min_memory = min_memory / 1024 / 1024
+			}
+			this.$openAPI.appManagement.appStore
+				.composeAppStoreInfo(id)
+				.then((res) => {
+					this.isLoading = false
+					this.sidebarOpen = true
+					this.appDetailData = res.data.data
+					this.appDetailData.id = id
+					this.appDetailData.min_memory = min_memory
+					this.appDetailData.compose = compose
+					this.architectures = res.data.data.architectures || []
+				})
+				.catch((e) => {
+					this.$buefy.toast.open({
+						message: escape(e.response.data.message),
+						// message: this.$t(`There was an error loading the data, please try again!`),
+						type: 'is-danger',
+					})
+				})
+				.finally(() => {
+					this.isLoading = false
+				})
+		},
+
+		retry() {
+			if (this.loadErrorStep === 1) {
+				this.getCategoryList()
+			} else if (this.loadErrorStep === 2) {
+				this.getStoreList()
+			}
+		},
+
+		/**
+		 * @description: Qucik Install App from app store
+		 * @param {*}
+		 * @return {*} void
+		 */
+		quickInstall(id) {
+			this.sidebarOpen = false
+			this.$openAPI.appManagement.appStore
+				.composeApp(id, {
+					headers: {
+						'content-type': 'application/yaml',
+						'accept': 'application/yaml',
+					},
+				})
+				.then((res) => {
+					if (res.status == 200) {
+						const composeJSON = parse(res.data)
+						if (composeJSON['x-casaos']?.tips?.before_install?.en_us) {
+							this.$buefy.modal.open({
+								component: defineAsyncComponent(() => import('@/components/Apps/TipEditorModal.vue')),
+								hasModalCard: true,
+								customClass: '',
+								trapFocus: true,
+								canCancel: [''],
+								scroll: 'keep',
+								animation: 'zoom-in',
+								events: {
+									submit: () => {
+										this.currentInstallId = id
+										this.installComposeApp(res.data, id)
+									},
+								},
+								props: {
+									composeData: composeJSON,
+								},
+							})
+						} else {
+							this.installComposeApp(res.data, id)
+						}
+					} else {
+						this.$buefy.toast.open({
+							message: this.$t(`There was an error installing the application, please try again!`),
+							type: 'is-warning',
+						})
+					}
+				})
+				.catch((e) => {
+					this.$buefy.toast.open({
+						message: escape(e.response.data.message),
+						type: 'is-danger',
+					})
+				})
+		},
+		/**
+		 * @description: Format AppStore tip datas
+		 * @param {data}
+		 * @return {html} Str
+		 */
+		formatTips(data) {
+			let html = ''
+			if (!isNull(data) && data != '') {
+				JSON.parse(data).forEach((item) => {
+					html += `<span class=' is-size-14px un-break-word'>${item.content}</span>`
+					if (item.value != '') {
+						html += `<span class='tag is-primary ml-1'>${item.value}</span>`
+					}
+					html += '<br/>'
+				})
+			}
+			return html
+		},
+
+		/**
+		 * @description: Get App icon form image
+		 * @param {*} image
+		 * @return {*}
+		 */
+		getIconFromImage(image) {
+			if (image == '') {
+				return ''
+			} else {
+				const appIcon = image.split(':')[0].split('/').pop()
+				return `https://icon.casaos.io/main/all/${appIcon}.png`
+			}
+		},
+		/**
+		 * @description: Back to prev Step
+		 * @param {*}
+		 * @return {*} void
+		 */
+		prevStep() {
+			this.currentSlide--
+		},
+
+		/**
+		 * @description: Validate form async
+		 * @param {object} ref ref of component
+		 * @return {boolean}
+		 */
+		async checkStep(ref) {
+			// vee-validate 3 resolves to a Boolean, v4 to { valid, ... } — and an
+			// object is always truthy, so read `.valid` whenever it is there.
+			const result = await ref.validate()
+			return result?.valid ?? result
+		},
+
+		/**
+		 * @description: Submit datas after valid
+		 * @param {*}
+		 * @return {*} void
+		 */
+		installComposeApp(dockerComposeCommands) {
+			// Set before the request: the bus may announce the install before the
+			// request answers.
+			this.installStarted = true
+			return this.$openAPI.appManagement.compose
+				.installComposeApp(dockerComposeCommands, false, true)
+				.then((res) => {
+					if (res.status !== 200) {
+						this.installStarted = false
+						this.dockerComposeConfig = dockerComposeCommands
+						this.currentSlide = 1
+						this.errInfo = res.data
+
+						this.$buefy.toast.open({
+							message: this.$t('The information filled in needs to be corrected'),
+							type: 'is-warning',
+						})
+					}
+				})
+				.catch((e) => {
+					this.installStarted = false
+					if (e?.response?.status === 400) {
+						this.dockerComposeConfig = dockerComposeCommands
+						this.currentSlide = 1
+						this.errInfo = e.response.data.data
+					}
+					// The body is an object: as the message it read "[object Object]".
+					this.$buefy.toast.open({
+						message: escape(e?.response?.data?.message || String(e?.response?.status || e)),
+						type: 'is-danger',
+					})
+				})
+		},
+
+		// A compose installed as written, its .env with it (ImportPanel): the form never sees it,
+		// and a refusal is said as AppManagement words it.
+		async installAsWritten(text) {
+			this.installStarted = true
+			this.isLoading = true
+			try {
+				await this.$openAPI.appManagement.compose.installComposeApp(text, false, true)
+			} catch (e) {
+				this.installStarted = false
+				const data = e?.response?.data
+				this.$buefy.toast.open({ message: escape(data?.message || String(e)), type: 'is-danger', duration: 10000 })
+			} finally {
+				this.isLoading = false
+			}
+		},
+
+		checkComposeAppAndInstallComposeApp(dockerComposeCommands, appName) {
+			this.$refs.ComposeConfig.checkStep().then((valid) => {
+				if (valid.every(v => v === true)) {
+					this.isLoading = true
+					this.installComposeApp(withInstallEnv(dockerComposeCommands, this.importedEnv), appName)
+						.finally(() => {
+							this.isLoading = false
+						})
+				} else {
+					// toast info error.
+					this.$buefy.toast.open({
+						message: this.$t('Please confirm the input content.'),
+						duration: 5000,
+						type: 'is-danger',
+					})
+				}
+			})
+		},
+
+		switchAppConfigContent(composeCommands) {
+			this.currentSlide = 1
+			this.sidebarOpen = false
+			this.dockerComposeConfig = composeCommands
+		},
+
+		/**
+		 * @description: Save edit update
+		 * @return {*} void
+		 */
+		updateApp() {
+			this.$refs.ComposeConfig.checkStep().then((valid) => {
+				if (valid.every(v => v === true)) {
+					this.$openAPI.appManagement.compose
+						.applyComposeAppSettings(this.id, this.dockerComposeCommands, false, true)
+						.then((res) => {
+							if (res.status == 200) {
+								this.$emit('updateState')
+							} else {
+								this.errInfo = res.data
+
+								this.$buefy.toast.open({
+									message: this.$t('The information filled in needs to be corrected'),
+									duration: 10000,
+									type: 'is-warning',
+								})
+							}
+							this.$emit('close')
+						})
+						.catch((err) => {
+							if (err.response.status === 400) {
+								console.log('Get ERROR:', err.response.data)
+								this.errInfo = err.response.data
+							}
+							this.$buefy.toast.open({
+								message: escape(err.response.data.message),
+								duration: 5000,
+								type: 'is-warning',
+							})
+						})
+				} else {
+					// toast info error.
+					this.$buefy.toast.open({
+						message: this.$t('Please confirm the input content.'),
+						duration: 5000,
+						type: 'is-danger',
+					})
+				}
+			})
+		},
+
+		updateContainer() {
+			// Bypasses checkStep, so it needs the same defensive shape: vee-validate 3
+			// resolves to a Boolean, v4 to a truthy { valid, ... } object.
+			this.$refs.containerValida.validate().then((result) => {
+				if (result?.valid ?? result) {
+					this.isLoading = true
+					this.$api.container
+						.update(this.id, this.settingData)
+						.then((res) => {
+							if (res.data.success == 200) {
+								this.isLoading = false
+								this.$emit('updateState')
+							} else {
+								this.$buefy.toast.open({
+									message: escape(res.data.message.data),
+									type: 'is-warning',
+								})
+							}
+							this.$emit('close')
+						})
+						.catch((err) => {
+							this.isLoading = false
+							this.$buefy.toast.open({
+								message: escape(err.response.data.message),
+								type: 'is-warning',
+							})
+						})
+				}
+			})
+		},
+
+		/**
+		 * @description: Show import panel
+		 * @return {*} void
+		 */
+		showImportPanel() {
+			this.$buefy.modal.open({
+				component: ImportPanel,
+				hasModalCard: true,
+				customClass: '',
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				events: {
+					// the .env goes with the install of what the form makes of the compose
+					update: (e, env) => {
+						this.dockerComposeConfig = e
+						this.importedEnv = env || ''
+						this.$buefy.dialog.alert({
+							title: `⚠️ ${this.$t('Attention')}`,
+							message:
+								`<div class="nobrk"><h4 class="title is-5">${
+									this.$t('AutoFill only helps you to complete most of the configuration.')
+								}</h4>`
+								+ `<p class="mb-3">${
+									this.$t('Some configuration information such as:')
+								}</p>`
+								+ `<ul>`
+								+ `<li>1. ${
+									this.$t('the port and path of the Web UI')
+								}</li>`
+								+ `<li>2. ${
+									this.$t('the mount location of the volume or file')
+								}</li>`
+								+ `<li>3. ${
+									this.$t('the port mapping of the Host')
+								}</li>`
+								+ `<li>4. ${
+									this.$t('optional configuration items')
+								}</li>`
+								+ `</ul>`
+								+ `<p class="mt-3">${
+									this.$t(
+										'These include but are not limited to these cases and <b>still need to be confirmed or modified by you.</b>',
+									)
+								}</p>`
+								+ `<p class="mt-3">${
+									this.$t('Feel free to suggest improvements to this feature in an issue!')
+								}</p></div>`,
+							type: 'is-dark',
+						})
+					},
+					install: text => this.installAsWritten(text),
+				},
+				props: {
+					netWorks: this.networks,
+					oriNetWorks: this.tempNetworks,
+					deviceMemory: this.totalMemory,
+				},
+			})
+		},
+
+		/**
+		 * @description: Export AppData to json file
+		 * @param {*} function
+		 * @return {*} void
+		 */
+		exportYAML() {
+			let title = parse(this.dockerComposeCommands)?.['x-casaos']?.title
+			if (title) {
+				title = ice_i18n(title)
+			} else {
+				title = this.currentInstallId
+			}
+			const blob = new Blob([this.dockerComposeCommands], { type: '' })
+			FileSaver.saveAs(blob, `${title}.yaml`)
+		},
+
+		/**
+		 * @description: Get Network name from network list
+		 * @param {*}
+		 * @return {*} String
+		 */
+		getNetworkName(netId) {
+			if (netId == '') {
+				return 'bridge'
+			} else {
+				const network = this.tempNetworks.filter((net) => {
+					return net.name == netId
+				})
+				return network[0].name
+			}
+		},
+
+		/**
+		 * @description: Show Terminal & Logs panel
+		 * @return {*} void
+		 */
+		showTerminalPanel(serviceName = this.dockerComposeServiceName, initialTab = 'terminal', wantedContainerId = null) {
+			this.$openAPI.appManagement.compose
+				.composeAppContainers(this.id)
+				.then((res) => {
+					if (res.status == 200) {
+						const containers = res.data.data.containers
+						// A service holds a LIST of containers: the Containers tab names the one it
+						// was clicked on, and this panel's own console button has to choose.
+						const containerId = pickContainerId(containers && containers[serviceName], wantedContainerId)
+						if (!containerId) {
+							this.$buefy.toast.open({
+								message: this.$t('The compose file declares this service, but Docker runs no container for it.'),
+								type: 'is-warning',
+							})
+							return
+						}
+						this.$buefy.modal.open({
+							component: AppTerminalPanel,
+							hasModalCard: true,
+							customClass: 'terminal-modal',
+							trapFocus: true,
+							canCancel: [],
+							scroll: 'keep',
+							animation: 'zoom-in',
+							props: {
+								appid: containerId,
+								appName: this.currentInstallId,
+								serviceName,
+								initialTab,
+							},
+						})
+					}
+				})
+				.catch((err) => {
+					console.log('$openAPI.appManagement.compose.composeAppContainers', err.response)
+				})
+		},
+
+		openServicePanel({ service, containerId, tab }) {
+			this.showTerminalPanel(service, tab, containerId)
+		},
+
+		async getDiskList() {
+			try {
+				const storageRes = await this.$api.storage.list({ system: 'show' })
+				const storageArray = []
+				storageRes.data.data.forEach((item) => {
+					item.children.forEach((part) => {
+						part.disk = item.path
+						part.diskName = item.disk_name
+						storageArray.push(part)
+					})
+				})
+				this.storageData = storageArray.map((storage) => {
+					return {
+						name: storage.label,
+						isSystem: storage.diskName == 'System',
+						fsType: storage.type,
+						size: storage.size,
+						availSize: storage.avail,
+						usePercent: 100 - Math.floor((storage.avail * 100) / storage.size),
+						diskName: storage.drive_name,
+						path: storage.path,
+						mount_point: storage.mount_point,
+						disk: storage.disk,
+					}
+				})
+			} catch (error) {
+				console.log(error.response.message)
+			}
+		},
+
+		getSelection(val) {
+			this.installationLocation = val
+		},
+
+		async askInstallationLocation() {
+			try {
+				// get docker info
+				const { data } = await this.$api.container.getInstallationLocation()
+				switch (data.success) {
+					case 200:
+					case 400:
+					default:
+						this.isFirstInstall = !data.data.docker_root_dir
+						break
+				}
+			} catch (err) {
+				console.log(`${err} in askInstallationLocation`)
+			}
+		},
+
+		async submitInstallationLocation(val) {
+			this.isLoading = true
+			let path = ''
+			if (val === '/') {
+				path = `${val}var/lib/docker`
+			} else {
+				path = `${val}/docker`
+			}
+			try {
+				await this.$api.folder.create(path)
+			} catch {
+				this.$buefy.toast.open({
+					message: this.$t('Error when creating installation path for apps'),
+					type: 'is-danger',
+				})
+				return
+			}
+
+			this.$api.container
+				.putInstallationLocation(path)
+				.then((data) => {
+					this.isLoading = false
+					this.isFirstInstall = data.data.docker_root_dir
+				})
+				.catch((err) => {
+					this.isLoading = false
+					console.log(`${err} in submitInstallationLocation`)
+					this.$buefy.toast.open({
+						message: escape(err.message),
+						type: 'is-danger',
+					})
+				})
+		},
+
+		installAppProgress(resData) {
+			if (this.currentInstallAppName !== resData.name) {
+				return false
+			}
+
+			if (!resData.finished) {
+				this.currentInstallAppError = !resData.success
+				if (resData.success) {
+					this.currentInstallAppType = resData.type
+
+					if (resData.message !== '') {
+						const progress = Number(resData.message)
+						this.totalPercentage = progress < 0 ? 0 : progress
+
+						if (this.totalPercentage === 0) {
+							this.currentInstallAppText = 'Starting installation'
+						} else if (this.totalPercentage === 100) {
+							this.currentInstallAppText = 'Installation completed'
+						} else {
+							this.currentInstallAppText = 'Installing'
+						}
+					}
+				} else {
+					this.currentInstallAppText = resData.message
+				}
+			} else {
+				localStorage.removeItem('app_data')
+				this.addIdToSessionStorage(resData.name)
+
+				setTimeout(() => {
+					this.$emit('updateState')
+					this.$emit('close')
+				}, 500)
+			}
+		},
+
+		// The modal that holds the panel does not close on Escape (canCancel is empty): the panel does, and asks first when a
+		// draft is open. With a dialog already open, Escape belongs to the dialog. Outside a modal (the App Store tab) it does nothing.
+		onEscape(event) {
+			if (event.key !== 'Escape' || document.querySelector('.dialog') || !this.$el?.closest?.('.modal')) {
+				return
+			}
+			if (this.editorState.isDirty || this.state === 'install') {
+				this.requestClose()
+			}
+		},
+
+		onEditorState(state) {
+			this.editorState = state
+		},
+
+		// a draft in the open tab (the visibility ticks too) is not thrown away by a click on the cross
+		requestClose() {
+			if (!this.editorState.isDirty) {
+				this.$emit('close')
+				return
+			}
+			this.$buefy.dialog.confirm({
+				message: this.$t('You have unsaved changes. Closing discards them.'),
+				confirmText: this.$t('Discard'),
+				cancelText: this.$t('Cancel'),
+				type: 'is-warning',
+				onConfirm: () => this.$emit('close'),
+			})
+		},
+
+		// Any failure -- a 404, or a service without these routes -- is an app that
+		// is neither a git app nor adoptable, and the panel stays as it was.
+		async loadGitApp() {
+			try {
+				const res = await this.$api.gitApps.get(this.id)
+				this.gitApp = res.data.data
+			} catch {
+				this.gitApp = null
+			}
+		},
+
+		setEditorTab(tab) {
+			if (tab === this.editorTab)
+				return
+
+			// Leaving an editor tab throws its draft away: the form and the raw files
+			// are deliberately not synchronised, so an unapplied draft cannot survive.
+			if (!this.editorState.isDirty) {
+				this.switchEditorTab(tab)
+				return
+			}
+
+			this.$buefy.dialog.confirm({
+				message: this.$t('You have unapplied changes. Leaving this tab discards them.'),
+				confirmText: this.$t('Discard'),
+				cancelText: this.$t('Cancel'),
+				type: 'is-warning',
+				onConfirm: () => this.switchEditorTab(tab),
+			})
+		},
+
+		switchEditorTab(tab) {
+			// The editor left behind is unmounted with its draft; its last state must
+			// not keep the Apply button of the next tab enabled.
+			this.editorTab = tab
+			this.editorState = { canApply: false, isApplying: false, isDirty: false }
+			if (tab === 'env' && !this.envLoaded)
+				this.loadEnv()
+		},
+
+		async loadEnv() {
+			this.envLoading = true
+			this.envError = ''
+			try {
+				const res = await this.$api.container.getComposeEnv(this.id)
+				this.envText = res.data
+				this.envLoaded = true
+			} catch (error) {
+				const data = error.response && error.response.data
+				this.envError = (data && data.message) || error.message
+			} finally {
+				this.envLoading = false
+			}
+		},
+
+		onComposeApplied(composeYAML) {
+			this.dockerComposeConfig = composeYAML
+			this.$emit('updateState')
+			this.$emit('close')
+		},
+
+		onEnvApplied() {
+			// The app is being re-created; the next visit to the tab fetches afresh.
+			this.envLoaded = false
+			this.$emit('updateState')
+			this.$emit('close')
+		},
+
+		updateDockerComposeCommands(val) {
+			this.dockerComposeCommands = val
+		},
+
+		updateDockerComposeServiceName(val) {
+			this.dockerComposeServiceName = val
+		},
+		debounceSearchInput: debounce(function (e) {
+			this.searchKey = e
+		}, 250),
+	},
+
+	unmounted() {
+		document.removeEventListener('keyup', this.onEscape)
+		window.addEventListener('resize', this.setCSSVHVar)
+		clearInterval(this.timer)
+	},
+
+	sockets: {
+		'app:install-begin': function (res) {
+			// Another tab's install, or the dashboard's, is left alone, and with it
+			// its progress and its end: installAppProgress follows only the app named
+			// here. The flag is taken once, so an install started elsewhere later on
+			// does not take this one over.
+			if (!this.installStarted) {
+				return
+			}
+			this.installStarted = false
+			this.currentInstallAppName = res.Properties['app:name']
+			this.currentSlide = 2
+			this.currentInstallAppText = 'Start Installation...'
+			this.cancelButtonText = 'Continue in background'
+		},
+		'app:install-end': function (res) {
+			this.installAppProgress({
+				finished: true,
+				name: res.Properties['app:name'],
+				id: res.Properties['docker:container:id'],
+			})
+		},
+		'app:install-error': function (res) {
+			this.installAppProgress({
+				finished: false,
+				name: res.Properties['app:name'],
+				id: res.Properties['docker:container:id'],
+				success: false,
+				message: res.Properties.message,
+			})
+		},
+		'app:install-progress': function (res) {
+			this.installAppProgress({
+				finished: false,
+				name: res.Properties['app:name'],
+				id: res.Properties['docker:container:id'],
+				success: true,
+				type: 'pull',
+				message: res.Properties['app:progress'],
+			})
+		},
+		'docker:image:pull-progress': function (res) {
+			this.installAppProgress({
+				finished: false,
+				name: res.Properties['app:name'],
+				id: res.Properties['docker:container:id'],
+				success: true,
+				type: 'pull',
+				message: res.Properties.message,
+			})
+		},
+	},
+}
+</script>
+
+<style lang="scss">
+// appPanel global style
+.app-panel {
+    .modal-card-head {
+        background-color: var(--casa-surface-head);
+    }
+
+    ._stepStoreList {
+        min-height: calc(100vh - 2.5rem);
+
+        .modal-card-body {
+            overflow-y: scroll;
+            overflow-x: clip;
+        }
+    }
+}
+
+.app-search {
+    max-width: 12.5rem;
+    width: 100%;
+
+    .input {
+        height: 2rem !important;
+    }
+}
+
+.app-item {
+    border-radius: 0.5rem;
+    transition: background 0.3s ease;
+
+    &:hover {
+        background-color: var(--casa-hover-row);
+    }
+}
+
+.level-item {
+    .icon {
+        overflow: initial;
+    }
+}
+
+.install-animation {
+    width: 100px;
+    height: 100px;
+}
+
+.creating-animation {
+    width: 16rem;
+    height: 16rem;
+}
+
+.app-detial {
+    overflow: auto;
+    height: 100%;
+
+    .app-header {
+        position: relative;
+    }
+
+    .level {
+        .footing {
+            color: var(--casa-text-dim);
+        }
+    }
+
+    .swiper-button-next,
+    .swiper-rtl .swiper-button-prev {
+        right: -20px;
+        left: auto;
+    }
+
+    .swiper-button-prev,
+    .swiper-rtl .swiper-button-next {
+        left: -20px;
+        right: auto;
+    }
+}
+
+.featured-app {
+    .swiper-button-next,
+    .swiper-rtl .swiper-button-prev {
+        right: -20px;
+        top: calc(50% - 3.625rem);
+        left: auto;
+    }
+
+    .swiper-button-prev,
+    .swiper-rtl .swiper-button-next {
+        left: -20px;
+        top: calc(50% - 3.625rem);
+        right: auto;
+    }
+
+    .button {
+        box-sizing: border-box !important;
+    }
+}
+
+.app-select {
+    .dropdown-menu {
+        min-width: 1rem !important;
+    }
+
+    .dropdown-content {
+        border-radius: 0.5rem;
+        overflow-y: overlay !important;
+
+        &::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        &::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background: var(--casa-scrollbar-thumb-soft);
+            border-radius: 10px;
+            outline: none;
+        }
+    }
+
+    a.dropdown-item {
+        padding-right: 1.5rem;
+        font-size: 0.875rem;
+    }
+}
+
+@media screen and (min-width: 769px) {
+    .app-panel {
+        .animation-content {
+            max-width: 90% !important;
+        }
+
+        .modal-card {
+            width: 90vw;
+            transition: all 0.3s;
+
+            // The settings panel is meant to be narrower than the store list behind
+            // it, not narrow: 50rem held whatever the screen, and the Containers tab
+            // has ten columns to fit into it. Still under the 90vw above on a wide
+            // screen, so the two are still telling apart.
+            &.narrow {
+                width: min(92vw, 72rem) !important;
+            }
+
+            ._pl {
+                margin-right: 0;
+                margin-left: calc(90vw - 100%);
+            }
+        }
+    }
+}
+
+@media screen and (min-width: 1440px) {
+    .app-panel {
+        .modal-card {
+            width: 81rem !important;
+
+            ._pl {
+                margin-right: 0;
+                margin-left: calc(81rem - 100%);
+            }
+        }
+    }
+}
+
+@media screen and (max-width: 1366px) {
+    .f-list {
+        .is-one-quarter {
+            width: 33.333333% !important;
+        }
+    }
+}
+
+@media screen and (max-width: 1024px) {
+    .f-list {
+        .is-one-quarter {
+            width: 50% !important;
+        }
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .modal-card {
+        max-height: calc(var(--vh, 1vh) * 100);
+        border-radius: 0;
+
+        ._pl {
+            margin-right: 0;
+            margin-left: calc(100vw - 100%);
+        }
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .app-detial {
+        overflow: auto;
+        height: 100%;
+
+        .modal-card-head {
+            .button {
+                -webkit-tap-highlight-color: transparent;
+            }
+        }
+
+        .app-header {
+            position: relative;
+
+            .header-icon {
+                .is-128x128 {
+                    height: 96px;
+                    width: 96px;
+                }
+            }
+
+            .store-title {
+                font-size: 1.125rem;
+            }
+
+            .subtitle {
+                font-size: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .description {
+                .button {
+                    font-size: 0.75rem;
+                }
+            }
+        }
+
+        .level {
+            .mdi-36px.mdi-set,
+            .mdi-36px.mdi:before {
+                font-size: 24px;
+            }
+
+            .title {
+                font-size: 24px;
+            }
+
+            .footing {
+                font-size: 0.6rem !important;
+            }
+        }
+    }
+
+    .f-list {
+        .is-one-quarter {
+            width: 100% !important;
+        }
+    }
+}
+
+.pri-line-height {
+    line-height: 1.875rem;
+}
+
+.pri-message-alert {
+    height: 2rem;
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+    background: var(--casa-warning-strip);
+    border-radius: 0.25rem;
+    color: #d99000;
+    font-size: 0.875rem;
+    font-style: normal;
+}
+
+.is-overlay {
+    overflow: overlay;
+}
+
+.card-width {
+    max-width: 35rem;
+    min-width: 30rem;
+}
+</style>
+
+<style lang="scss" scoped>
+.close {
+    height: 2rem;
+    width: 2rem;
+    border-radius: 0.375rem;
+}
+
+.button[disabled] {
+    opacity: 0.3;
+}
+.icon-button{
+    width: 1.5rem;
+    height: 1.5rem;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+}
+
+._hideOverflow {
+    overflow: unset;
+}
+
+._b-line {
+    border-bottom: 1px solid var(--casa-border-faint) !important;
+}
+
+.progress {
+    border-radius: 6px;
+    height: 12px;
+
+    &::-webkit-progress-bar {
+        background: rgba(172, 184, 195, 0.4);
+    }
+
+    &::-webkit-progress-value {
+        opacity: 1;
+    }
+}
+
+._dropdown {
+    height: 2rem;
+    border-radius: 0.25rem;
+
+    ._dropdown__typeIcon {
+        margin-left: 0.625rem;
+        width: 18px;
+        height: 18px;
+    }
+
+    ._dropdown__stateIcon {
+        margin-right: 0.625rem;
+        width: 16px;
+        height: 16px;
+    }
+
+    ._dropdown__item {
+        margin-bottom: 2px;
+    }
+}
+
+.slide-fade-enter-active,
+.search-fade-enter-active {
+    transition: all 0.3s ease-out;
+}
+
+.slide-fade-leave-active,
+search-fade-leave-active {
+    transition: opacity 0s;
+}
+
+.search-fade-enter-from {
+    transform: translateY(-20px);
+    opacity: 0;
+}
+
+.slide-fade-enter-from {
+    transform: translateX(20px);
+    opacity: 0;
+}
+</style>

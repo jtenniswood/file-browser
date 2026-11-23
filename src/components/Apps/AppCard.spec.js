@@ -1,0 +1,939 @@
+// @vitest-environment happy-dom
+import Buefy from 'buefy'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/plugins/i18n'
+import AppCard from '@/components/Apps/AppCard.vue'
+import cTooltip from '@/components/basicComponents/tooltip/tooltip.vue'
+import { alertBadge } from '@/components/Stats/alertBadge'
+import { FLEET_APP_NAME, openFleet } from '@/components/Fleet/entry'
+import { LOGS_APP_NAME, hasLogs, openLogs } from '@/components/Logs/entry'
+import BackupBadge from '@/components/backup/BackupBadge.vue'
+import { backupStatus, refresh } from '@/service/backupStatus'
+import { publicShare } from '@/service/publicShare'
+
+vi.mock('@/components/Fleet/entry', async importOriginal => ({ ...await importOriginal(), openFleet: vi.fn() }))
+vi.mock('@/components/Logs/entry', async importOriginal => ({ ...await importOriginal(), openLogs: vi.fn(), hasLogs: vi.fn(() => Promise.resolve(false)) }))
+
+// the service reads the box's backup routes: the card is given its answers instead
+vi.mock('@/service/backupStatus', async () => {
+	const { reactive } = await import('vue')
+	return { backupStatus: reactive({ states: [], ok: false }), refresh: vi.fn(() => Promise.resolve()) }
+})
+
+// the service reads the box's /v1/share: the card is given its answer instead
+vi.mock('@/service/publicShare', async () => {
+	const { reactive } = await import('vue')
+	return { publicShare: reactive({ status: null, ok: false }), refresh: vi.fn(() => Promise.resolve()) }
+})
+
+// require.context has no Vite equivalent; a near-empty table makes $t return its key.
+// The one entry is the message the update failure needs: $t leaves a MISSING key
+// uninterpolated, which would hide whether the backend's reason reaches the toast.
+// It maps to itself, exactly as en_US.json does.
+vi.mock('@/assets/lang', () => ({
+	default: {
+		en_us: {
+			'Statistics, {count} active alert': 'Statistics, {count} active alert',
+			'Statistics, {count} active alerts': 'Statistics, {count} active alerts',
+			'Updating {name} failed: {reason}': 'Updating {name} failed: {reason}',
+			'Backed up {when} to {destination}': 'Backed up {when} to {destination}',
+			'Backup failed: {reason}': 'Backup failed: {reason}',
+			'{name} now runs the image that was just pulled.': '{name} now runs the image that was just pulled.',
+			'{name} already runs the newest image, so it was left as it is.': '{name} already runs the newest image, so it was left as it is.',
+			'Could not check whether a newer image exists for {name}. It keeps the image it has.': 'Could not check whether a newer image exists for {name}. It keeps the image it has.',
+		},
+	},
+}))
+
+async function card(item, mocks = {}) {
+	// mount, not shallowMount: the badge sits in a Buefy tooltip's default slot,
+	// and a stub does not render its slots
+	const wrapper = mount(AppCard, {
+		props: { item: { name: 'syncthing', app_type: 'v2app', status: 'running', title: { en_us: 'Syncthing' }, ...item } },
+		global: {
+			plugins: [Buefy, i18n],
+			provide: { homeShowFiles: () => {}, openAppStore: () => {} },
+			mocks: { $baseIp: 'localhost', $store: { getters: { canWrite: true, canReadModule: () => true } }, ...mocks },
+		},
+		// the card's menu is rendered with append-to-body, so it lands outside
+		// the wrapper and has to be looked for in the document
+		attachTo: document.body,
+	})
+	// the NEW marker is read from sessionStorage in mounted(), one tick after
+	// the first render
+	await nextTick()
+
+	return wrapper
+}
+
+// A failed assertion skips the unmount that follows it, and the button tests below
+// look at the whole document, so one broken card left behind would make them pass
+// on someone else's markup.
+afterEach(() => {
+	document.body.innerHTML = ''
+	backupStatus.states = []
+	backupStatus.ok = false
+	publicShare.status = null
+	publicShare.ok = false
+	vi.mocked(refresh).mockClear()
+})
+
+function badges(wrapper) {
+	return wrapper.findAllComponents(cTooltip).map(c => c.props('content'))
+}
+
+describe('app card update badge', () => {
+	it('marks an app the last image check found something newer for', async () => {
+		const wrapper = await card({ update_available: true })
+		expect(badges(wrapper)).toEqual(['Update available'])
+		wrapper.unmount()
+	})
+
+	it('says nothing about an app that has not been checked', async () => {
+		// absent is not false: nobody has looked, and a badge either way would be a
+		// claim this app cannot back up
+		const wrapper = await card({})
+		expect(badges(wrapper)).toEqual([])
+		wrapper.unmount()
+	})
+
+	it('says nothing about an app that is up to date', async () => {
+		const wrapper = await card({ update_available: false })
+		expect(badges(wrapper)).toEqual([])
+		wrapper.unmount()
+	})
+
+	it('does not stack the update badge on top of the NEW marker', async () => {
+		// both are absolutely positioned over the icon, so only one may render
+		sessionStorage.setItem('newAppTag', JSON.stringify(['syncthing']))
+		const wrapper = await card({ update_available: true })
+		expect(badges(wrapper)).toEqual(['NEW'])
+		sessionStorage.removeItem('newAppTag')
+		wrapper.unmount()
+	})
+})
+
+describe('app card for an account that cannot manage', () => {
+	it('keeps Open and the read-only entries, and hides everything that changes the box', async () => {
+		const wrapper = await card({ update_available: true }, { $store: { getters: { canWrite: false, canReadModule: () => false } } })
+		const labels = [...document.body.querySelectorAll('button')].map(b => b.textContent.trim())
+		// Open is a link, not a button
+		expect(document.body.textContent).toContain('Open')
+		expect(labels).not.toContain('Tips')
+		for (const hidden of ['Uninstall', 'Delete', 'Setting', 'Check then update', 'Back up'])
+			expect(labels).not.toContain(hidden)
+		expect(document.body.querySelector('.has-text-red')).toBeNull()
+		expect(document.body.querySelector('[class*="shutdown"], .restart-outline')).toBeNull()
+		wrapper.unmount()
+	})
+
+	it('keeps the whole menu for the admin', async () => {
+		const wrapper = await card({}, { $store: { getters: { canWrite: true, canReadModule: () => true } } })
+		const labels = [...document.body.querySelectorAll('button')].map(b => b.textContent.trim())
+		expect(labels).toEqual(expect.arrayContaining(['Setting', 'Uninstall']))
+		wrapper.unmount()
+	})
+})
+
+describe('app card git badge', () => {
+	// the grid's item for a git app no deployment has given a container
+	const withoutContainer = { name: 'jarvis', app_type: 'v2app', status: '', title: { en_us: 'jarvis' }, git: { new_commits: false, state: 'build_failed', deployed: false } }
+
+	it('shows the state of a git app, in red when it failed', async () => {
+		const wrapper = await card({ git: { state: 'build_failed', new_commits: true } })
+		expect(badges(wrapper)).toEqual(['Build failed'])
+		expect(wrapper.findComponent(cTooltip).props('modal')).toBe('is-danger')
+		wrapper.unmount()
+	})
+
+	it('says new commits wait on an idle git app', async () => {
+		const wrapper = await card({ git: { state: 'idle', new_commits: true } })
+		expect(badges(wrapper)).toEqual(['New commits'])
+		expect(wrapper.findComponent(cTooltip).props('modal')).toBe('is-success')
+		wrapper.unmount()
+	})
+
+	it('says nothing of an idle git app with nothing new', async () => {
+		const wrapper = await card({ git: { state: 'idle', new_commits: false } })
+		expect(badges(wrapper)).toEqual([])
+		wrapper.unmount()
+	})
+
+	it('offers a git app with no container only its panel and its deletion', async () => {
+		const wrapper = await card(withoutContainer)
+		expect([...document.body.querySelectorAll('button')].map(b => b.textContent.trim())).toEqual(['Setting', 'Delete'])
+		wrapper.unmount()
+	})
+
+	it('opens the panel of a git app with no container, which has nothing to start', async () => {
+		const wrapper = await card(withoutContainer, { $messageBus: () => {} })
+		wrapper.vm.openApp(wrapper.props('item'))
+		expect(wrapper.emitted('configApp')).toEqual([[wrapper.props('item'), true]])
+		wrapper.unmount()
+	})
+
+	it('deletes a git app with no container through its own route, once confirmed', async () => {
+		const confirm = vi.fn()
+		const remove = vi.fn().mockResolvedValue({ data: {} })
+		const wrapper = await card(withoutContainer, { $buefy: { dialog: { confirm } }, $api: { gitApps: { remove } } })
+		document.body.querySelectorAll('button').forEach((b) => {
+			if (b.textContent.trim() === 'Delete')
+				b.click()
+		})
+		expect(remove).not.toHaveBeenCalled()
+
+		await confirm.mock.calls[0][0].onConfirm()
+		expect(remove).toHaveBeenCalledWith('jarvis')
+		expect(wrapper.emitted('updateState')).toHaveLength(1)
+		wrapper.unmount()
+	})
+
+	it('keeps the whole menu of a git app whose first deployment left containers', async () => {
+		const wrapper = await card({ ...withoutContainer, status: 'exited' })
+		const labels = [...document.body.querySelectorAll('button')].map(b => b.textContent.trim())
+		expect(labels).toContain('Uninstall')
+		expect(labels).not.toContain('Delete')
+		wrapper.unmount()
+	})
+
+	it('puts a git state before the image badge, and the NEW marker before both', async () => {
+		const building = await card({ git: { state: 'building', new_commits: false }, update_available: true })
+		expect(badges(building)).toEqual(['Building'])
+		building.unmount()
+
+		sessionStorage.setItem('newAppTag', JSON.stringify(['syncthing']))
+		const fresh = await card({ git: { state: 'building', new_commits: false } })
+		expect(badges(fresh)).toEqual(['NEW'])
+		sessionStorage.removeItem('newAppTag')
+		fresh.unmount()
+	})
+})
+
+describe('app card update button', () => {
+	function offersUpdate() {
+		return [...document.body.querySelectorAll('button')]
+			.some(b => b.textContent.includes('Check then update'))
+	}
+
+	it('offers the update to an app installed from a store', async () => {
+		const wrapper = await card({ is_uncontrolled: false })
+		expect(offersUpdate()).toBe(true)
+		wrapper.unmount()
+	})
+
+	it('offers it to an imported app too', async () => {
+		// for those the update is a pull of the tags they already name, which is the
+		// only kind of update they can have; before this they had no update path at all
+		const wrapper = await card({ is_uncontrolled: true })
+		expect(offersUpdate()).toBe(true)
+		wrapper.unmount()
+	})
+})
+
+describe('imported container', () => {
+	// an adopted container is keyed by its Docker ID, and carries its Docker name
+	// as the only title the grid has for it
+	const imported = { name: 'ab12cd34ef56', app_type: 'container', title: { en_us: 'plex' } }
+
+	function labels() {
+		return [...document.body.querySelectorAll('button')].map(b => b.textContent.trim())
+	}
+
+	function offersRecreate() {
+		return labels().some(l => l.includes('Pull image and recreate'))
+	}
+
+	// the card's menu and the confirmation dialog are both appended to the body
+	function click(label) {
+		document.body.querySelectorAll('button').forEach((b) => {
+			if (b.textContent.trim() === label)
+				b.click()
+		})
+	}
+
+	async function recreateSpy(item) {
+		const recreateContainerByID = vi.fn(() => Promise.resolve({}))
+		const wrapper = await card(item, {
+			$openAPI: { appManagement: { container: { recreateContainerByID } } },
+		})
+		return { wrapper, recreateContainerByID }
+	}
+
+	it('offers to pull and recreate a container CasaOS did not install', async () => {
+		const wrapper = await card(imported)
+		expect(offersRecreate()).toBe(true)
+		wrapper.unmount()
+	})
+
+	it('offers it to no other kind of app', async () => {
+		// the endpoint takes a raw container ID and is not compose-aware: run on a
+		// container of a compose app it would leave the project's own state behind
+		for (const app_type of ['v2app', 'v1app', 'LinkApp']) {
+			const wrapper = await card({ app_type })
+			expect(offersRecreate(), app_type).toBe(false)
+			wrapper.unmount()
+		}
+	})
+
+	it('does not offer it for a container a compose project owns', async () => {
+		// app_type is 'container' for anything the backend's compose list did not
+		// claim, and that list skips a project whose config file it cannot read -- a
+		// Portainer or Dockge stack lands here with app_type 'container'. Recreating
+		// one of its containers clones it out of the project and leaves the project's
+		// state behind, so the project label the container carries has to win.
+		const wrapper = await card({ ...imported, compose_project: 'immich' })
+		expect(offersRecreate()).toBe(false)
+		wrapper.unmount()
+	})
+
+	it('offers a compose-owned container the one thing it can do', async () => {
+		// It used to have no menu at all: with the recreate refused, every remaining
+		// entry was for an app CasaOS installed. That left these cards with no way to
+		// find out what they even were, which is what the details panel is for --
+		// and it is still the only entry, because everything else would act on a
+		// project this dashboard does not manage.
+		const wrapper = await card({ ...imported, compose_project: 'immich' })
+		expect(wrapper.find('.action-btn').exists()).toBe(true)
+		expect(labels()).toEqual(['Details'])
+		wrapper.unmount()
+	})
+
+	it('offers an imported container nothing it cannot do', async () => {
+		// Open, Uninstall and the start/stop pair all route through code that only
+		// handles v1 and v2 apps
+		const wrapper = await card(imported)
+		expect(labels()).toEqual(['Details', 'Pull image and recreate'])
+		wrapper.unmount()
+	})
+
+	it('recreates nothing until the dialog is confirmed', async () => {
+		const { wrapper, recreateContainerByID } = await recreateSpy(imported)
+
+		click('Pull image and recreate')
+		await nextTick()
+		expect(recreateContainerByID).not.toHaveBeenCalled()
+
+		click('Cancel')
+		await nextTick()
+		expect(recreateContainerByID).not.toHaveBeenCalled()
+		expect(wrapper.vm.isRecreating).toBe(false)
+		wrapper.unmount()
+	})
+
+	it('asks for a pull, no force, and a tag of its own', async () => {
+		const { wrapper, recreateContainerByID } = await recreateSpy(imported)
+
+		click('Pull image and recreate')
+		await nextTick()
+		click('Recreate container')
+		await nextTick()
+
+		// pull on, force off: without a newer image there is nothing to gain from
+		// destroying a container whose definition exists nowhere else. The tag rides
+		// along as a query parameter and comes back on this recreate's events.
+		expect(recreateContainerByID).toHaveBeenCalledWith('ab12cd34ef56', true, undefined, {
+			params: { 'recreate:container:id': 'ab12cd34ef56' },
+		})
+		expect(wrapper.vm.isRecreating).toBe(true)
+		wrapper.unmount()
+	})
+
+	it('words the confirmation as both halves of what a recreate does', async () => {
+		// A copy check, not a guarantee: what the clone keeps is decided backend-side.
+		// It is here so the dialog cannot quietly go back to promising only the good
+		// half -- the writable layer does not survive, and the sentence has to say so.
+		const { wrapper } = await recreateSpy(imported)
+
+		click('Pull image and recreate')
+		await nextTick()
+
+		const dialog = document.body.textContent
+		expect(dialog).toContain('volumes and bind mounts are carried over')
+		expect(dialog).toContain('anything written elsewhere inside the container is lost')
+		wrapper.unmount()
+	})
+
+	it('follows the recreate by the tag it sent, not by the name the events carry', async () => {
+		const wrapper = await card(imported, { $EventBus: { $emit: () => {} } })
+		const updateEnd = wrapper.vm.$options.sockets['app:update-end']
+		wrapper.vm.isRecreating = true
+
+		// another app finishing an update is not our recreate
+		updateEnd.call(wrapper.vm, { Properties: { 'app:name': 'plex', 'recreate:container:id': '99ffee00' } })
+		expect(wrapper.vm.isRecreating).toBe(true)
+
+		// app:name is the container's `name` LABEL when it has one, and Config.Labels
+		// carries what the image declared: for any UBI-derived image the event names
+		// the image and never the container. The tag still identifies the recreate.
+		updateEnd.call(wrapper.vm, { Properties: { 'app:name': 'ubi9/nginx-120', 'recreate:container:id': 'ab12cd34ef56' } })
+		expect(wrapper.vm.isRecreating).toBe(false)
+		// the recreate leaves a new container with a new ID behind, so the grid the
+		// card came from has to be read again
+		expect(wrapper.emitted('updateState')).toHaveLength(1)
+		wrapper.unmount()
+	})
+
+	it('reports the failure whichever of the two events lands first', async () => {
+		// the backend publishes update-error from a goroutine and update-end from a
+		// defer, so the order is a race. Gating on isRecreating meant whichever arrived
+		// first cleared the flag and the second was dropped: a recreate that pulled and
+		// then failed to clone reported nothing at all, and the spinner just stopped.
+		const open = vi.fn()
+		const wrapper = await card(imported, { $buefy: { toast: { open } }, $EventBus: { $emit: () => {} } })
+		wrapper.vm.isRecreating = true
+
+		const fire = (event, Properties) =>
+			wrapper.vm.$options.sockets[event].call(wrapper.vm, { Properties })
+
+		// update-end first, carrying a pull that worked and so saying nothing itself
+		fire('app:update-end', { 'recreate:container:id': 'ab12cd34ef56', 'docker:image:updated': 'true' })
+		expect(open).not.toHaveBeenCalled()
+
+		fire('app:update-error', { 'recreate:container:id': 'ab12cd34ef56', 'message': 'no space left on device' })
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].message).toContain('no space left on device')
+		expect(open.mock.calls[0][0].type).toBe('is-danger')
+		wrapper.unmount()
+	})
+	it('stops waiting when the recreate reports an error', async () => {
+		const wrapper = await card(imported)
+		wrapper.vm.isRecreating = true
+
+		wrapper.vm.$options.sockets['app:update-error'].call(wrapper.vm, {
+			Properties: { 'recreate:container:id': 'ab12cd34ef56', 'message': 'no space left on device' },
+		})
+		expect(wrapper.vm.isRecreating).toBe(false)
+		wrapper.unmount()
+	})
+})
+
+describe('app store update outcome', () => {
+	// the App Store update returns 200 straight away and reports what happened over
+	// the socket: update-error carries the reason, update-end carries nothing at all
+	async function updating(item = {}) {
+		const open = vi.fn()
+		const wrapper = await card(item, { $buefy: { toast: { open } } })
+		wrapper.vm.isUpdating = true
+		const fire = (event, Properties) =>
+			wrapper.vm.$options.sockets[event].call(wrapper.vm, { Properties })
+		return { wrapper, open, fire }
+	}
+
+	it('shows the reason a failed update gave, and stops waiting', async () => {
+		const { wrapper, open, fire } = await updating()
+
+		fire('app:update-error', { 'app:name': 'syncthing', 'message': 'no space left on device' })
+
+		expect(wrapper.vm.isUpdating).toBe(false)
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].type).toBe('is-danger')
+		expect(open.mock.calls[0][0].message).toBe('Updating Syncthing failed: no space left on device')
+		wrapper.unmount()
+	})
+
+	it('leaves another app\'s failure to that app\'s card', async () => {
+		const { wrapper, open, fire } = await updating()
+
+		fire('app:update-error', { 'app:name': 'jellyfin', 'message': 'no space left on device' })
+
+		expect(open).not.toHaveBeenCalled()
+		expect(wrapper.vm.isUpdating).toBe(true)
+		wrapper.unmount()
+	})
+
+	it('claims nothing on an update-end that says nothing', async () => {
+		// a compose update publishes this whether it worked or failed; the green
+		// "latest version" toast used to fire on both
+		const { wrapper, open, fire } = await updating()
+
+		fire('app:update-end', { 'app:name': 'syncthing' })
+
+		expect(wrapper.vm.isUpdating).toBe(false)
+		expect(open).not.toHaveBeenCalled()
+		wrapper.unmount()
+	})
+
+	it('still says an app is up to date when the event says so', async () => {
+		const { wrapper, open, fire } = await updating()
+
+		fire('app:update-end', { 'app:name': 'syncthing', 'docker:image:updated': 'false' })
+
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].type).toBe('is-success')
+		wrapper.unmount()
+	})
+
+	it('leaves the word on a successful update to the section that reloads the grid', async () => {
+		// app:updated is the only thing a compose update ends with, and the card is
+		// about to be replaced by the reloaded one: two toasts for one update
+		const { wrapper, open, fire } = await updating()
+
+		fire('app:update-end', { 'app:name': 'syncthing', 'app:updated': 'true' })
+
+		expect(open).not.toHaveBeenCalled()
+		wrapper.unmount()
+	})
+})
+
+describe('what a finished recreate may claim', () => {
+	const imported = { name: 'ab12cd34ef56', app_type: 'container', title: { en_us: 'plex' } }
+
+	async function recreated(properties) {
+		const open = vi.fn()
+		const wrapper = await card(imported, { $buefy: { toast: { open } }, $EventBus: { $emit: () => {} } })
+		wrapper.vm.isRecreating = true
+		wrapper.vm.$options.sockets['app:update-end'].call(wrapper.vm, {
+			Properties: { 'recreate:container:id': 'ab12cd34ef56', ...properties },
+		})
+		return { wrapper, open }
+	}
+
+	it('says the container runs the new image only when it was really replaced', async () => {
+		const { wrapper, open } = await recreated({ 'app:updated': 'true', 'docker:image:updated': 'true' })
+
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].message).toBe('plex now runs the image that was just pulled.')
+		expect(open.mock.calls[0][0].type).toBe('is-success')
+		wrapper.unmount()
+	})
+
+	it('says nothing newer exists only when the check said so', async () => {
+		const { wrapper, open } = await recreated({ 'docker:image:updated': 'false' })
+
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].message).toBe('plex already runs the newest image, so it was left as it is.')
+		wrapper.unmount()
+	})
+
+	it('does not read a failed pull as proof that nothing newer exists', async () => {
+		// the pull error is swallowed backend-side and the recreate is skipped, so the
+		// event carries neither property: an unreachable registry arriving as green
+		// "nothing newer" is how a host stops hearing about updates
+		const { wrapper, open } = await recreated({})
+
+		expect(open).toHaveBeenCalledTimes(1)
+		expect(open.mock.calls[0][0].message).toBe('Could not check whether a newer image exists for plex. It keeps the image it has.')
+		expect(open.mock.calls[0][0].type).toBe('is-warning')
+		wrapper.unmount()
+	})
+
+	it('claims nothing when the image was pulled but the container was not replaced', async () => {
+		// app:update-error carries the reason; a success toast beside it is the lie
+		const { wrapper, open } = await recreated({ 'docker:image:updated': 'true' })
+
+		expect(open).not.toHaveBeenCalled()
+		expect(wrapper.vm.isRecreating).toBe(false)
+		wrapper.unmount()
+	})
+})
+
+describe('a stack CasaOS cannot load', () => {
+	const reason = 'validating /opt/jarvis/docker-compose.yml: services.jarvis Additional property gpus is not allowed'
+	const container = { name: 'ab12cd34ef56', app_type: 'container', title: { en_us: 'jarvis-jarvis-1' }, compose_project: 'jarvis' }
+
+	it('says so on the card, with the reason on hover', async () => {
+		const wrapper = await card({ ...container, compose_load_error: reason })
+		const line = wrapper.findAll('p').find(p => p.text() === 'CasaOS cannot read its compose file.')
+		expect(line).toBeTruthy()
+		expect(line.attributes('title')).toBe(reason)
+	})
+
+	it('says nothing for a stack that loaded', async () => {
+		const wrapper = await card(container)
+		expect(wrapper.text()).not.toContain('CasaOS cannot read its compose file.')
+	})
+})
+
+// The Statistics card carries the number of active resource alerts over its icon: a number, never a word from a service.
+describe('the Statistics card count badge', () => {
+	const stats = { name: 'Statistics', app_type: 'system', status: 'running', title: { en_us: 'Statistics' } }
+	const badge = wrapper => wrapper.find('.stats-badge')
+	afterEach(() => Object.assign(alertBadge.counts, { app_management: 0, virt_management: 0, core: 0 }))
+
+	it('shows the total, hidden from assistive technology, and names it on the icon', async () => {
+		Object.assign(alertBadge.counts, { app_management: 2, core: 1 })
+		const wrapper = await card(stats)
+
+		expect(badge(wrapper).text()).toBe('3')
+		expect(badge(wrapper).attributes('aria-hidden')).toBe('true')
+		expect(wrapper.find('img').attributes('alt')).toBe('Statistics, 3 active alerts')
+		wrapper.unmount()
+	})
+
+	it('says "alert" for one', async () => {
+		alertBadge.counts.core = 1
+		const wrapper = await card(stats)
+
+		expect(wrapper.find('img').attributes('alt')).toBe('Statistics, 1 active alert')
+		wrapper.unmount()
+	})
+
+	it('shows 99+ above 99', async () => {
+		Object.assign(alertBadge.counts, { app_management: 99, core: 1 })
+		const wrapper = await card(stats)
+
+		expect(badge(wrapper).text()).toBe('99+')
+		wrapper.unmount()
+	})
+
+	it('shows 99 as it is', async () => {
+		alertBadge.counts.app_management = 99
+		const wrapper = await card(stats)
+
+		expect(badge(wrapper).text()).toBe('99')
+		wrapper.unmount()
+	})
+
+	it('is only for the system app, not for an app that is merely called Statistics', async () => {
+		alertBadge.counts.core = 2
+		const wrapper = await card({ ...stats, app_type: 'v1app' })
+
+		expect(badge(wrapper).exists()).toBe(false)
+		wrapper.unmount()
+	})
+
+	it('shows nothing at 0', async () => {
+		const wrapper = await card(stats)
+
+		expect(badge(wrapper).exists()).toBe(false)
+		expect(wrapper.find('img').attributes('alt') || '').not.toContain('active alert')
+		wrapper.unmount()
+	})
+
+	it('follows the count while the card is on screen', async () => {
+		const wrapper = await card(stats)
+		alertBadge.counts.core = 2
+		await nextTick()
+
+		expect(badge(wrapper).text()).toBe('2')
+		wrapper.unmount()
+	})
+
+	it('is drawn on no other card', async () => {
+		alertBadge.counts.core = 5
+		const wrapper = await card({ name: 'Virtual Machines', app_type: 'system', title: { en_us: 'Virtual Machines' } })
+
+		expect(badge(wrapper).exists()).toBe(false)
+		wrapper.unmount()
+	})
+})
+
+// The system apps carry a small gear chip in the card's top-right corner, where the others have their action button.
+describe('the system app marker', () => {
+	const marker = wrapper => wrapper.find('.system-marker')
+	const system = { name: 'Files', app_type: 'system', status: 'running', title: { en_us: 'Files' } }
+
+	it('marks the system apps, Statistics included, with an accessible name', async () => {
+		for (const name of ['App Store', 'Files', 'Virtual Machines', 'Statistics']) {
+			const wrapper = await card({ ...system, name })
+
+			expect(marker(wrapper).exists()).toBe(true)
+			expect(marker(wrapper).attributes('title')).toBe('System app')
+			expect(marker(wrapper).attributes('aria-label')).toBe('System app')
+			expect(marker(wrapper).find('.icon').attributes('aria-hidden')).toBe('true')
+			wrapper.unmount()
+		}
+	})
+
+	it('keeps the Statistics count badge beside it', async () => {
+		alertBadge.counts.core = 2
+		const wrapper = await card({ ...system, name: 'Statistics' })
+
+		expect(marker(wrapper).exists()).toBe(true)
+		expect(wrapper.find('.stats-badge').text()).toBe('2')
+		alertBadge.counts.core = 0
+		wrapper.unmount()
+	})
+
+	it.each(['v2app', 'container', 'LinkApp'])('is absent on a %s card', async (app_type) => {
+		const wrapper = await card({ app_type })
+
+		expect(marker(wrapper).exists()).toBe(false)
+		wrapper.unmount()
+	})
+})
+
+describe('the Fleet card', () => {
+	it('opens the Fleet page from its card', () => {
+		const vm = { $buefy: { modal: { open: vi.fn() } }, $store: { state: { appLaunchInIframe: true, appLaunchExceptions: [] } } }
+		AppCard.methods.openSystemApps.call(vm, { name: FLEET_APP_NAME, app_type: 'system' })
+		expect(openFleet).toHaveBeenCalledWith(vm.$buefy, vm.$store.state)
+	})
+})
+
+describe('logs', () => {
+	const state = { appLaunchInIframe: true, appLaunchExceptions: [] }
+	const labels = () => [...document.body.querySelectorAll('button')].map(b => b.textContent.trim())
+
+	it('opens the Logs page from its card', () => {
+		const vm = { $buefy: {}, $store: { state } }
+		AppCard.methods.openSystemApps.call(vm, { name: LOGS_APP_NAME, app_type: 'system' })
+		expect(openLogs).toHaveBeenCalledWith(vm.$buefy, state)
+	})
+
+	it('offers Logs in the menu of a compose app only where AppManagement keeps logs', async () => {
+		hasLogs.mockResolvedValueOnce(true)
+		let wrapper = await card({})
+		await flushPromises()
+		expect(labels()).toContain('Logs')
+		wrapper.unmount()
+
+		wrapper = await card({})
+		await flushPromises()
+		expect(labels()).not.toContain('Logs')
+		wrapper.unmount()
+	})
+
+	it('opens a compose app on its project, and a v1 app on the name of its container', async () => {
+		const vm = { $buefy: {}, $store: { state }, item: { name: 'immich' }, isV1App: false }
+		await AppCard.methods.showLogs.call(vm)
+		expect(openLogs).toHaveBeenLastCalledWith(vm.$buefy, state, { app: 'immich' })
+
+		const getDetail = vi.fn().mockResolvedValue({ data: { data: { name: 'jellyfin' } } })
+		const v1 = { ...vm, item: { name: 'ab12cd34ef56' }, isV1App: true, $api: { container: { getDetail } } }
+		await AppCard.methods.showLogs.call(v1)
+		expect(getDetail).toHaveBeenCalledWith('ab12cd34ef56')
+		expect(openLogs).toHaveBeenLastCalledWith(v1.$buefy, state, { app: 'jellyfin' })
+	})
+})
+
+describe('the compact card (beta dashboard)', () => {
+	function compactCard(compact, item = { name: 'Files', app_type: 'system', status: 'running', title: { en_us: 'Files' } }) {
+		const homeShowFiles = vi.fn()
+		const wrapper = mount(AppCard, {
+			props: { item, compact },
+			global: {
+				plugins: [Buefy, i18n],
+				provide: { homeShowFiles, openAppStore: () => {} },
+				mocks: { $baseIp: 'localhost', $store: { getters: { canWrite: true, canReadModule: () => true } } },
+			},
+			attachTo: document.body,
+		})
+		return { wrapper, homeShowFiles }
+	}
+
+	it('opens the app from a click anywhere on the card', async () => {
+		const { wrapper, homeShowFiles } = compactCard(true)
+
+		await wrapper.find('.cards-content p').trigger('click')
+
+		expect(homeShowFiles).toHaveBeenCalledTimes(1)
+		expect(wrapper.attributes('role')).toBe('button')
+	})
+
+	it('opens the app once from a click on the icon, and from the keyboard', async () => {
+		const { wrapper, homeShowFiles } = compactCard(true)
+
+		await wrapper.find('img').trigger('click')
+		expect(homeShowFiles).toHaveBeenCalledTimes(1)
+
+		await wrapper.trigger('keydown.enter')
+		expect(homeShowFiles).toHaveBeenCalledTimes(2)
+	})
+
+	it('leaves the menu button to itself', async () => {
+		const { wrapper, homeShowFiles } = compactCard(true, { name: 'syncthing', app_type: 'LinkApp', hostname: 'http://x', status: 'running', title: { en_us: 'X' } })
+		const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+		await wrapper.find('.action-btn p').trigger('click')
+
+		expect(open).not.toHaveBeenCalled()
+		expect(homeShowFiles).not.toHaveBeenCalled()
+		open.mockRestore()
+	})
+
+	it('changes nothing on the classic card: only the icon opens the app', async () => {
+		const { wrapper, homeShowFiles } = compactCard(false)
+
+		await wrapper.find('.cards-content p').trigger('click')
+		expect(homeShowFiles).not.toHaveBeenCalled()
+
+		await wrapper.find('img').trigger('click')
+		expect(homeShowFiles).toHaveBeenCalledTimes(1)
+		expect(wrapper.attributes('role')).toBeUndefined()
+	})
+})
+
+describe('the compact card favorites and subtitle (beta dashboard)', () => {
+	const mounted = []
+	// the menu is appended to the body: a card left mounted would leak its items into the next test
+	afterEach(() => {
+		mounted.splice(0).forEach(wrapper => wrapper.unmount())
+	})
+
+	function card(props) {
+		const wrapper = mount(AppCard, {
+			props: { item: { name: 'jellyfin', app_type: 'v2app', status: 'running', title: { en_us: 'Jellyfin' } }, ...props },
+			global: {
+				plugins: [Buefy, i18n],
+				provide: { homeShowFiles: () => {}, openAppStore: () => {} },
+				mocks: { $baseIp: 'localhost', $store: { getters: { canWrite: true, canReadModule: () => true } } },
+			},
+			attachTo: document.body,
+		})
+		mounted.push(wrapper)
+		return wrapper
+	}
+
+	it('offers to pin the app from its menu, and says so once it is pinned', async () => {
+		const wrapper = card({ compact: true })
+		// the menu is appended to the body
+		expect(document.body.textContent).toContain('Add to favorites')
+
+		await wrapper.setProps({ favorite: true })
+		expect(document.body.textContent).toContain('Remove from favorites')
+	})
+
+	it('asks the section to pin or unpin it', () => {
+		const wrapper = card({ compact: true })
+
+		wrapper.vm.toggleFavorite()
+
+		expect(wrapper.emitted('toggleFavorite')).toEqual([[wrapper.vm.item]])
+	})
+
+	it('has no pin item on the classic card, and shows a subtitle only on the compact one', () => {
+		expect(card({ compact: false }).text()).not.toContain('Your files')
+		expect(document.body.textContent).not.toContain('Add to favorites')
+
+		expect(card({ compact: true, subtitle: 'Your files' }).text()).toContain('Your files')
+	})
+
+	it('says the memory the app uses beside its state, on a running card only', async () => {
+		const wrapper = card({ compact: true, memory: 1024 * 1024 * 640 })
+		expect(wrapper.find('.app-state').text()).toContain('640 MB')
+
+		await wrapper.setProps({ item: { name: 'jellyfin', app_type: 'v2app', status: 'exited', title: { en_us: 'Jellyfin' } } })
+		expect(wrapper.find('.app-state').text()).not.toContain('MB')
+
+		expect(card({ compact: true }).find('.app-state').text()).not.toContain('·')
+	})
+
+	it('says an update in a chip, and has no NEW marker, on the compact card only', async () => {
+		const item = { name: 'jellyfin', app_type: 'v2app', status: 'running', update_available: true, title: { en_us: 'Jellyfin' } }
+		const compact = card({ compact: true, item })
+		await compact.setData({ newAppIds: ['jellyfin'] })
+
+		expect(compact.find('.update-chip').text()).toBe('Available update')
+		expect(compact.text()).not.toContain('NEW')
+		// the corner tooltip of the classic card is not drawn a second time
+		expect(compact.text()).not.toContain('Update available')
+
+		const classic = card({ compact: false, item })
+		await classic.setData({ newAppIds: ['jellyfin'] })
+		expect(classic.find('.update-chip').exists()).toBe(false)
+		expect(classic.text()).toContain('NEW')
+	})
+})
+
+describe('the backup badge on the tile', () => {
+	const couple = (over = {}) => ({ app: 'syncthing', destination: 'nas', state: 'ok', running: false, last_error: '', last_ok_at: new Date(Date.now() - 3600000).toISOString(), ...over })
+	const badge = wrapper => wrapper.findComponent(BackupBadge)
+
+	it('asks the service for the backup state of this box when it is created', async () => {
+		const wrapper = await card({})
+		expect(refresh).toHaveBeenCalledTimes(1)
+		wrapper.unmount()
+	})
+
+	it('shows ok for an app whose scheduled backups are all fine', async () => {
+		backupStatus.states = [couple()]
+		backupStatus.ok = true
+		const wrapper = await card({})
+		expect(badge(wrapper).props('kind')).toBe('ok')
+		expect(badge(wrapper).props('title')).toContain('to nas')
+		wrapper.unmount()
+	})
+
+	it('shows a cross with the reason when the last backup failed', async () => {
+		backupStatus.states = [couple({ state: 'failed', last_error: 'disk full' })]
+		backupStatus.ok = true
+		const wrapper = await card({})
+		expect(badge(wrapper).props('kind')).toBe('failed')
+		expect(badge(wrapper).props('title')).toContain('disk full')
+		wrapper.unmount()
+	})
+
+	it('shows grey attention for a late backup', async () => {
+		backupStatus.states = [couple({ state: 'late' })]
+		backupStatus.ok = true
+		const wrapper = await card({})
+		expect(badge(wrapper).props('kind')).toBe('attention')
+		wrapper.unmount()
+	})
+
+	it('shows nothing for an app without an enabled schedule', async () => {
+		backupStatus.states = [couple({ app: 'jellyfin', state: 'failed', last_error: 'x' })]
+		backupStatus.ok = true
+		const wrapper = await card({})
+		expect(badge(wrapper).exists()).toBe(false)
+		wrapper.unmount()
+	})
+
+	it('shows nothing while the service is not ok, whatever it last held', async () => {
+		backupStatus.states = [couple()]
+		backupStatus.ok = false
+		const wrapper = await card({})
+		expect(badge(wrapper).exists()).toBe(false)
+		wrapper.unmount()
+	})
+
+	it('appears when the service answers after the card was drawn', async () => {
+		const wrapper = await card({})
+		expect(badge(wrapper).exists()).toBe(false)
+		backupStatus.states = [couple()]
+		backupStatus.ok = true
+		await nextTick()
+		expect(badge(wrapper).props('kind')).toBe('ok')
+		wrapper.unmount()
+	})
+
+	it.each([[false], [true]])('sits by the title, outside the action menu, on the card (compact: %s)', async (compact) => {
+		backupStatus.states = [couple()]
+		backupStatus.ok = true
+		const wrapper = mount(AppCard, {
+			props: { compact, item: { name: 'syncthing', app_type: 'v2app', status: 'running', title: { en_us: 'Syncthing' } } },
+			global: { plugins: [Buefy, i18n], provide: { homeShowFiles: () => {}, openAppStore: () => {} }, mocks: { $baseIp: 'localhost', $store: { getters: { canWrite: true, canReadModule: () => true } } } },
+			attachTo: document.body,
+		})
+		await nextTick()
+		expect(badge(wrapper).exists()).toBe(true)
+		expect(badge(wrapper).element.closest('.action-btn')).toBeNull()
+		expect(badge(wrapper).element.closest('.app-text')).not.toBeNull()
+		// the menu trigger is still there
+		expect(wrapper.find('.action-btn').exists()).toBe(true)
+		wrapper.unmount()
+	})
+})
+
+describe('public sharing on the card', () => {
+	const shared = { supported: true, reason: '', name: 'b', apps: [{ name: 'jellyfin', shared: true, url: 'https://jellyfin.b.box.x' }] }
+	const shareButton = () => [...document.querySelectorAll('button')].find(b => b.textContent.includes('Share on the Internet'))
+
+	it('shows Public on a shared app', async () => {
+		publicShare.status = shared
+		publicShare.ok = true
+		const wrapper = await card({ name: 'jellyfin' })
+		expect(wrapper.find('.public-badge').attributes('title')).toBe('https://jellyfin.b.box.x')
+		expect(wrapper.find('.public-badge').text()).toBe('Public')
+		expect(shareButton()).toBeTruthy()
+		wrapper.unmount()
+	})
+
+	it('shows no badge on an app that is not shared', async () => {
+		publicShare.status = shared
+		publicShare.ok = true
+		const wrapper = await card({ name: 'nextcloud' })
+		expect(wrapper.find('.public-badge').exists()).toBe(false)
+		wrapper.unmount()
+	})
+
+	it('no share entry on an old core', async () => {
+		const wrapper = await card({ name: 'jellyfin' })
+		expect(wrapper.find('.public-badge').exists()).toBe(false)
+		expect(shareButton()).toBeUndefined()
+		wrapper.unmount()
+	})
+})

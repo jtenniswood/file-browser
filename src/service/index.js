@@ -1,0 +1,27 @@
+import {
+	AppMethodsApiFactory,
+	AppStoreMethodsApi,
+	ComposeMethodsApiFactory,
+	Configuration,
+	ContainerMethodsApiFactory,
+	ImageMethodsApiFactory,
+	InternalMethodsApiFactory,
+} from '@/openapi/app_management'
+import { instance } from '@/service/service'
+// app_management
+
+// 初始化 openapi 配置
+const config = new Configuration({})
+
+const appManagement = {}
+appManagement.compose = new ComposeMethodsApiFactory(config, '/v2/app_management', instance)
+// appManagement.appStore = new AppStoreMethodsApiFactory(config, '/v2/app_management', instance);
+appManagement.appStore = new AppStoreMethodsApi(config, '/v2/app_management', instance)
+appManagement.app = new AppMethodsApiFactory(config, '/v2/app_management', instance)
+appManagement.container = new ContainerMethodsApiFactory(config, '/v2/app_management', instance)
+appManagement.image = new ImageMethodsApiFactory(config, '/v2/app_management', instance)
+const appGrid = new InternalMethodsApiFactory(config, '/v2/app_management', instance)
+const appCompose = new ComposeMethodsApiFactory(config, '/v2/app_management', instance)
+
+// apiClient.axios = instance;
+export default { appManagement, appGrid, appCompose }

@@ -1,0 +1,2197 @@
+<template>
+	<div class="navbar top-bar is-flex is-align-items-center _fixed-height">
+		<div class="navbar-brand ml-4 _fixed-height">
+			<!-- SideBar Button Start -->
+			<div id="sidebar-btn" class="is-flex is-align-items-center navbar-item">
+				<b-tooltip :active="!$store.state.isMobile"
+					:label="sidebarIconLabel"
+					position="is-right"
+					type="is-dark">
+					<div role="button" @click="showSideBar">
+						<b-icon :icon="sidebarIcon" class="picon" pack="casa" size="is-20" />
+					</div>
+				</b-tooltip>
+			</div>
+			<!-- SideBar Button Start -->
+
+			<!-- Account Dropmenu Start -->
+			<b-dropdown animation="fade1"
+				aria-role="list"
+				class="navbar-item"
+				:close-on-click="true"
+				@active-change="getUserInfo">
+				<template #trigger>
+					<b-tooltip :active="!$store.state.isMobile"
+						:label="$t('Account')"
+						position="is-right"
+						type="is-dark"
+						@click="$messageBus('account_setting')">
+						<p role="button">
+							<b-icon class="picon" icon="account-outline" pack="casa" size="is-20" />
+						</p>
+					</b-tooltip>
+				</template>
+
+				<b-dropdown-item :focusable="false" aria-role="menu-item" class="p-0" custom>
+					<AccountPanel />
+				</b-dropdown-item>
+			</b-dropdown>
+			<!-- Account Dropmenu End -->
+
+			<!-- Settings Dropmenu Start -->
+			<b-dropdown ref="settingsDrop"
+				animation="fade1"
+				aria-role="list"
+				class="navbar-item settings-drop"
+				@active-change="onOpen">
+				<template #trigger>
+					<b-tooltip :active="!$store.state.isMobile"
+						:label="$t('Settings')"
+						position="is-right"
+						type="is-dark"
+						@click="$messageBus('dashboardsetting')">
+						<p role="button">
+							<b-icon :class="{ 'update-icon-dot': updateInfo.need_update }"
+								class="picon"
+								icon="control-outline"
+								pack="casa"
+								size="is-20" />
+						</p>
+					</b-tooltip>
+				</template>
+
+				<b-dropdown-item :focusable="false" aria-role="menu-item" class="p-0 touch-targets" custom>
+					<h2 class="_title mb-2 has-text-weight-bold">
+						{{ $t("Settings") }}
+					</h2>
+
+					<!-- Rows: one line (_box) or a title line with lines under it. The
+					icon, the label, then the value and the control on the right; the
+					lines under the title start where the label does (pl-55 ml-1). -->
+					<div class="_settings-columns">
+						<div class="_settings-column">
+							<p class="_settings-group">
+								{{ $t("Display") }}
+							</p>
+							<div class="_settings-section">
+
+								<!-- Search Engine Switch Start  -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="show-search-outline" pack="casa" size="is-20" />
+										{{ $t("Show Search Bar") }}
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="barData.search_switch"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="saveData" />
+										</b-field>
+									</div>
+								</div>
+								<!-- Search Engine Switch End  -->
+
+								<!-- Search Engine Start -->
+								<div v-if="barData.search_switch"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="search-outline" pack="casa" size="is-20" />
+										{{ $t("Search Engine") }}
+									</div>
+									<div>
+										<b-field>
+											<b-select v-model="barData.search_engine"
+												class="set-select"
+												size="is-small"
+												@update:model-value="saveData">
+												<option v-for="item in searchEngines" :key="item.name" :value="item.url">
+													{{ item.name }}
+												</option>
+											</b-select>
+										</b-field>
+									</div>
+								</div>
+								<!-- Search Engine End -->
+
+								<!-- Language Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="language-outline" pack="casa" size="is-20" />
+										{{ $t("Language") }}
+									</div>
+									<div>
+										<b-field>
+											<b-select v-model="barData.lang" class="set-select" size="is-small" @update:model-value="saveData">
+												<option v-for="lang in languages" :key="lang.lang" :value="lang.lang">
+													{{ lang.name }}
+												</option>
+											</b-select>
+										</b-field>
+									</div>
+								</div>
+								<!-- Language End -->
+
+								<!-- Appearance Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="theme-light-dark" size="is-20" />
+										{{ $t("Appearance") }}
+									</div>
+									<div>
+										<b-field>
+											<b-select v-model="theme" class="set-select" size="is-small" @update:model-value="setThemePreference">
+												<option v-for="item in themes" :key="item.value" :value="item.value">
+													{{ $t(item.label) }}
+												</option>
+											</b-select>
+										</b-field>
+									</div>
+								</div>
+								<!-- Appearance End -->
+
+								<!-- Background Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="wallpaper-outline" pack="casa" size="is-20" />
+										{{ $t("Wallpaper") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showChangeWallpaperModal">
+											{{ $t("Change") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Background End -->
+
+								<!--  Show other Docker container app(s) Switch Start  -->
+								<div v-if="$store.state.notImportList.length > 0"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="docker-outline" pack="casa" size="is-20" />
+										{{ $t("Show other Docker container app(s)") }}
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="barData.existing_apps_switch"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="saveData" />
+										</b-field>
+									</div>
+								</div>
+								<!--  Show other Docker container app(s) Switch End  -->
+
+								<!--  Recommended modules Switch Start  -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2"
+											icon="display-applications-outline"
+											pack="casa"
+											size="is-20" />
+										{{ $t("Show Recommended Apps") }}
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="barData.recommend_switch"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="saveData" />
+										</b-field>
+									</div>
+								</div>
+								<!-- Recommended modules Switch End  -->
+
+								<!-- Beta dashboard Switch Start: the dashboard shows the modules, which an account without a right does not read -->
+								<div
+									v-if="readsAModule"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="flask-outline" size="is-20" />
+										{{ $t("New dashboard (beta)") }}
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="barData.dashboard_beta"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="saveData" />
+										</b-field>
+									</div>
+								</div>
+								<!-- Beta dashboard Switch End -->
+
+								<!-- Beta login page Switch Start: for the whole box, not this user -->
+								<div v-if="$store.getters.canWrite"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="login-variant" size="is-20" />
+										{{ $t("New login page (beta)") }}
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="loginBeta"
+												:disabled="loginBetaSaving"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="setLoginBeta" />
+										</b-field>
+									</div>
+								</div>
+								<!-- Beta login page Switch End -->
+
+								<!-- Terminal full screen Switch Start -->
+								<div
+									v-if="$store.getters.canWrite"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="terminal-outline" pack="casa" size="is-20" />
+										{{ $t("Open the Terminal full screen") }}
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="terminalFullScreen"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="setTerminalFullScreen" />
+										</b-field>
+									</div>
+								</div>
+								<!-- Terminal full screen Switch End -->
+
+								<!-- App Launching Start -->
+								<div class="_row">
+									<div class="is-flex is-align-items-center">
+										<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+											<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="open-in-app" size="is-20" />
+											{{ $t("App launching") }}
+										</div>
+										<div class="ml-2">
+											<b-button rounded size="is-small" type="is-dark" @click.stop="showAppLaunchModal">
+												{{ $t("Configure") }}
+											</b-button>
+										</div>
+									</div>
+									<div class="pl-55 ml-1 mt-1 is-size-7 _has-text-gray _is-wrap">
+										{{ $t($store.state.appLaunchInIframe ? "Apps open inside CasaOS" : "Apps open in a new tab") }}
+									</div>
+								</div>
+								<!-- App Launching End -->
+							</div>
+						</div>
+
+						<div v-if="$store.getters.canWrite" class="_settings-column">
+							<p class="_settings-group">
+								{{ $t("System") }}
+							</p>
+							<div class="_settings-section">
+
+								<!-- WebUI Port Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="port-outline" pack="casa" size="is-20" />
+										{{ $t("WebUI Port") }}
+									</div>
+									<div class="_has-text-gray">
+										{{ port }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showPortPanel">
+											{{ $t("Change") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- WebUI Port End -->
+
+								<!-- Backup destinations Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="cloud-outline" pack="casa" size="is-20" />
+										{{ $t("Backup destinations") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showBackupDestinations">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Backup destinations End -->
+
+								<!-- Folder sync Start -->
+								<div v-if="showFolderSync"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="autorenew" size="is-20" />
+										{{ $t("Folder sync") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showCloudSync">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Folder sync End -->
+
+								<!-- Docker data Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="database-outline" size="is-20" />
+										{{ $t("Docker data") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showDockerLocation">
+											{{ $t("Change") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Docker data End -->
+								<!-- Docker cleanup Start: it deletes, so it is the owner's -->
+								<div v-if="$store.getters.isAdmin"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="broom" size="is-20" />
+										{{ $t("Docker cleanup") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showDockerCleanup">
+											{{ $t("Open") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Docker cleanup End -->
+								<!-- Automatic app updates Start: it changes apps by itself, so it is the owner's -->
+								<div v-if="$store.getters.isAdmin"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="update" size="is-20" />
+										{{ $t("Automatic app updates") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showAppAutoUpdate">
+											{{ $t("Open") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Automatic app updates End -->
+								<!-- Share accounts Start -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="account-multiple-outline" size="is-20" />
+										{{ $t("Share accounts") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showShareAccounts">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Share accounts End -->
+
+								<!-- Alerts Start -->
+								<div v-if="alertsAvailable"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="bell-outline" size="is-20" />
+										{{ $t("Alerts") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showAlerts">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Alerts End -->
+
+								<!-- Logs Start -->
+								<div v-if="logsAvailable"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="text-box-outline" size="is-20" />
+										{{ $t("Logs") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showLogsSettings">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Logs End -->
+
+								<!-- Accounts Start -->
+								<div v-if="$store.getters.isAdmin"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="account-multiple-outline" size="is-20" />
+										{{ $t("Accounts") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showAccounts">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Accounts End -->
+
+								<!-- Fleet Start -->
+								<div v-if="fleetAvailable"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="server-network" size="is-20" />
+										{{ $t("Fleet") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showFleet">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Fleet End -->
+
+								<!-- Remote access Start -->
+								<div v-if="fleetAvailable"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="cellphone-link" size="is-20" />
+										{{ $t("Remote access") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showRemoteAccess">
+											{{ $t("Configure") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Remote access End -->
+
+								<!-- Automount USB Drive Start  -->
+								<div
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" icon="usb-outline" pack="casa" size="is-20" />
+										{{ $t("Automount USB Drive") }}
+										<b-tooltip v-if="isRaspberryPi"
+											:label="
+												$t(
+													'Enabling this function may cause boot failures when the Raspberry Pi device is booted from USB',
+												)
+											"
+											multilined
+											type="is-dark">
+											<b-icon class="ml-1" icon="question-outline" pack="casa" size="is-small" />
+										</b-tooltip>
+									</div>
+									<div>
+										<b-field>
+											<b-switch v-model="autoUsbMount"
+												class="is-flex-direction-row-reverse mr-0 _small"
+												type="is-dark"
+												@update:model-value="usbAutoMount" />
+										</b-field>
+									</div>
+								</div>
+								<!-- Automount USB Drive End  -->
+
+								<!-- Anonymous statistics Start -->
+								<div v-if="telemetryEnabled !== null" class="_row">
+									<div class="is-flex is-align-items-center">
+										<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+											<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="chart-box-outline" size="is-20" />
+											{{ $t("Anonymous usage statistics") }}
+										</div>
+										<div>
+											<b-field>
+												<b-switch :model-value="telemetryEnabled"
+													:disabled="telemetrySaving"
+													class="is-flex-direction-row-reverse mr-0 _small"
+													type="is-dark"
+													@update:model-value="setTelemetry" />
+											</b-field>
+										</div>
+									</div>
+									<div class="pl-55 ml-1 mt-1 is-size-7">
+										<a href="#" @click.prevent="showTelemetryPreview">{{ $t("See what is sent") }}</a>
+									</div>
+								</div>
+								<!-- Anonymous statistics End -->
+							</div>
+						</div>
+
+						<div v-if="$store.getters.canWrite" class="_settings-column">
+							<p class="_settings-group">
+								{{ $t("Updates") }}
+							</p>
+							<div class="_settings-section">
+
+								<!-- Update Start -->
+								<div class="_row">
+									<div class="is-flex is-align-items-center">
+										<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+											<b-icon class="mr-1 ml-2" icon="update-outline" pack="casa" size="is-20" />
+											<div :class="{ 'update-text-dot': updateInfo.need_update }">
+												{{ $t("Current version") }}
+											</div>
+										</div>
+										<div class="_has-text-gray">
+											v{{ updateInfo.current_version }}
+										</div>
+										<!-- the box keeps its last look for 20 minutes: this asks again now -->
+										<b-tooltip v-if="!updateInfo.image_managed" :label="$t('Check for updates')" position="is-left" type="is-dark">
+											<button :aria-label="$t('Check for updates')" :disabled="checkingVersion" class="_check-updates ml-1" type="button" @click="checkVersion(true)">
+												<b-icon :custom-class="checkingVersion ? 'mdi-spin' : ''" custom-size="mdi-18px" icon="refresh" />
+											</button>
+										</b-tooltip>
+										<div v-if="updateInfo.need_update" class="ml-2">
+											<b-button rounded size="is-small" type="is-dark" @click="showUpdateModal">
+												{{ $t("Update") }}
+											</b-button>
+										</div>
+									</div>
+
+									<div v-if="updateInfo.image_managed" class="is-flex is-align-items-center pl-55 ml-1 mt-1 is-size-7 _has-text-gray">
+										{{ $t("Updated with the system") }}
+									</div>
+									<div v-else-if="!updateInfo.need_update" class="is-flex is-align-items-center pl-55 ml-1 mt-1 is-size-7 _has-text-gray">
+										{{ $t(latestText) }}
+										<b-icon class="ml-1" custom-size="mdi-18px" icon="check" type="is-success" />
+									</div>
+									<div v-else class="pl-55 ml-1 mt-1 is-size-7 _has-text-gray _is-wrap">
+										{{ $t(updateText) }}
+									</div>
+								</div>
+								<!-- Update End -->
+
+								<!-- Automatic update Start -->
+								<div v-if="autoUpdate" class="_row">
+									<div class="is-flex is-align-items-center">
+										<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+											<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="autorenew" size="is-20" />
+											{{ $t("Update automatically") }}
+										</div>
+										<div>
+											<b-field>
+												<b-switch :model-value="autoUpdate.enabled"
+													:disabled="autoUpdateSaving"
+													class="is-flex-direction-row-reverse mr-0 _small"
+													type="is-dark"
+													@update:model-value="setAutoUpdate({ enabled: $event })" />
+											</b-field>
+										</div>
+									</div>
+									<template v-if="autoUpdate.enabled">
+										<div class="is-flex is-align-items-center pl-55 ml-1 mt-1 is-size-7">
+											{{ $t("Between") }}
+											<b-select :model-value="autoUpdate.window.start"
+												:disabled="autoUpdateSaving"
+												class="set-select mx-1"
+												size="is-small"
+												@update:model-value="setAutoUpdate({ window_start: $event })">
+												<option v-for="hour in hours" :key="hour" :disabled="hour === autoUpdate.window.end" :value="hour">
+													{{ hour }}
+												</option>
+											</b-select>
+											{{ $t("and") }}
+											<b-select :model-value="autoUpdate.window.end"
+												:disabled="autoUpdateSaving"
+												class="set-select mx-1"
+												size="is-small"
+												@update:model-value="setAutoUpdate({ window_end: $event })">
+												<option v-for="hour in hours" :key="hour" :disabled="hour === autoUpdate.window.start" :value="hour">
+													{{ hour }}
+												</option>
+											</b-select>
+										</div>
+										<div class="pl-55 ml-1 mt-1 is-size-7 _has-text-gray _is-wrap">
+											{{ $t("New releases install at night, one day after they come out, never during a backup or an app operation.") }}
+										</div>
+										<div :class="{ '_has-text-gray': autoUpdate.state !== 'paused' }" class="pl-55 ml-1 mt-1 is-size-7 _is-wrap">
+											{{ autoUpdateStateText }}
+										</div>
+										<div v-if="autoUpdate.state === 'paused'" class="is-flex is-align-items-center pl-55 ml-1 mt-1 is-size-7">
+											<a href="#" @click.prevent="showUpgradeLog">{{ $t("See the log") }}</a>
+											<b-button :disabled="autoUpdateSaving"
+												class="ml-2"
+												rounded
+												size="is-small"
+												type="is-dark"
+												@click="setAutoUpdate({ resume: true })">
+												{{ $t("Try again") }}
+											</b-button>
+										</div>
+									</template>
+								</div>
+								<!-- Automatic update End -->
+
+								<!-- System Package Update Start -->
+								<div v-if="!updateInfo.image_managed"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="package-variant-closed" size="is-20" />
+										{{ $t("System packages") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click.stop="showSystemPackageUpdateModal">
+											{{ $t("Check") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- System Package Update End -->
+
+								<!-- Modules Start: only against a core that has the feature -->
+								<div v-if="modulesAvailable"
+									class="is-flex is-align-items-center _row _box">
+									<div class="is-flex is-align-items-center is-flex-grow-1 _is-normal">
+										<b-icon class="mr-1 ml-2" custom-size="is-size-5" icon="puzzle-outline" size="is-20" />
+										{{ $t("Modules") }}
+									</div>
+									<div class="ml-2">
+										<b-button rounded size="is-small" type="is-dark" @click="showModules">
+											{{ $t("Manage") }}
+										</b-button>
+									</div>
+								</div>
+								<!-- Modules End -->
+							</div>
+						</div>
+					</div>
+
+					<!-- Restart or Shutdown Start -->
+					<div v-if="$store.getters.canWrite"
+						class="is-flex is-align-content-center is-justify-content-center _footer mt-4 pl-3 pr-3 pt-2 pb-2">
+						<div class="mr-1 column is-half is-flex is-align-items-center is-justify-content-center hover-effect is-clickable _is-radius _is-normal"
+							@click="power('Restart')">
+							<b-icon class="mr-1" icon="restart-outline" pack="casa" />
+							{{ $t(restart) }}
+						</div>
+						<div class="ml-1 column is-half is-flex is-align-items-center is-justify-content-center is-clickable hover-effect-attention _has-text-attention _is-radius _is-normal"
+							@click="power('Shutdown')">
+							<b-icon class="mr-1"
+								custom-class="_has-text-attention"
+								icon="shutdown-outline"
+								pack="casa" />
+							{{ $t(shutdown) }}
+						</div>
+					</div>
+					<!-- Restart or Shutdown End -->
+				</b-dropdown-item>
+			</b-dropdown>
+			<!-- Settings Dropmenu End -->
+
+			<!-- Terminal  Start -->
+			<div v-if="$store.getters.canWrite" class="is-flex is-align-items-center ml-3 _fixed-height" @click="showTerminalPanel">
+				<b-tooltip :active="!$store.state.isMobile"
+					:label="$t('Terminal & Logs')"
+					position="is-right"
+					style="height: 1.25rem"
+					type="is-dark">
+					<b-icon class="picon" icon="terminal-outline" pack="casa" size="is-20" />
+				</b-tooltip>
+			</div>
+			<!-- Terminal  End -->
+
+			<!-- System support badge Start: the end of the system's support, and the way to its upgrade -->
+			<button v-if="osSupportBadge"
+				:class="`is-${osSupportBadge.tone}`"
+				aria-haspopup="dialog"
+				class="os-support-badge ml-3"
+				type="button"
+				@click="showOsSupport">
+				<b-icon :icon="osSupportBadge.icon" size="is-small" />
+				<span>{{ $t(osSupportBadge.label, { date: osSupportBadge.date }) }}</span>
+			</button>
+			<!-- System support badge End -->
+		</div>
+
+		<div class="navbar-menu">
+			<div class="navbar-end mr-3">
+				<!-- <b-icon pack="far" icon="comment-alt"></b-icon> -->
+			</div>
+		</div>
+
+		<b-modal v-model="showPower" :can-cancel="false" class="_modal" scroll="clip" width="20rem">
+			<b-message @close="resetPower">
+				<template #header>
+					{{ $t(showPowerTitle) }}
+					<img v-if="showPowerTitle === 'Now shutting down'"
+						:src="require('@/assets/img/loading/waiting.svg')"
+						alt="pending"
+						class="ml-1 is-24x24">
+				</template>
+				<div :class="showPowerTitle === 'Now shutting down' ? 'mb-4' : ''"
+					class="is-flex is-align-items-center is-justify-content-start _is-normal">
+					{{ $t(showPowerMessage) }}
+				</div>
+			</b-message>
+			<footer v-if="showPowerTitle !== 'Now shutting down'"
+				class="is-flex is-flex-direction-row-reverse">
+				<button
+					class="ml-2 mr-5 mt-3 mb-3 pr-4 pl-4 _is-normal _has-background-blue is-flex is-align-items-center is-justify-content-center">
+					{{ $t("Connecting") }}
+					<img :src="require('@/assets/img/power/waiting-white.svg')" alt="loading" class="ml-1">
+				</button>
+			</footer>
+		</b-modal>
+	</div>
+</template>
+
+<script>
+import { defineAsyncComponent } from 'vue'
+import escape from 'lodash/escape'
+import AccountPanel from './account/AccountPanel.vue'
+import TerminalPanel from './logsAndTerminal/TerminalPanel.vue'
+import BackupDestinations from './settings/BackupDestinations.vue'
+import CloudSync from './settings/CloudSync.vue'
+import { syncAvailable } from './settings/cloudSyncText.js'
+import PortPanel from './settings/PortPanel.vue'
+import UpdateModal from './settings/UpdateModal.vue'
+import SystemPackageUpdateModal from './settings/SystemPackageUpdateModal.vue'
+import AppLaunchModal from './settings/AppLaunchModal.vue'
+import TelemetryPreviewModal from './settings/TelemetryPreviewModal.vue'
+import AlertsModal from './settings/AlertsModal.vue'
+import OsSupportModal from './settings/OsSupportModal.vue'
+import ModulesModal from './settings/ModulesModal.vue'
+import { osBadge } from './settings/osSupport'
+import { powerRefusal } from './settings/osUpgrade'
+import { opensFullScreen, setOpensFullScreen } from './logsAndTerminal/terminalLogin'
+import { mixin } from '@/mixins/mixin'
+import { readsAModule } from '@/store/confirmRole'
+import { readThemePreference, setThemePreference } from '@/mixins/app/themePreference'
+import messages from '@/assets/lang'
+
+import events from '@/events/events'
+
+const systemConfigName = 'system'
+
+export default {
+	name: 'TopBar',
+	components: {
+		AccountPanel,
+	},
+	mixins: [mixin],
+	props: {
+		initBarData: {
+			type: Object,
+		},
+	},
+	data() {
+		return {
+			timer: 0,
+			// User
+			userInfo: this.$store.state.user,
+			userRetried: false,
+			// System
+			barData: {
+				lang: this.getInitLang(),
+				search_engine: 'https://duckduckgo.com/?q=',
+				search_switch: true,
+				recommend_switch: true,
+				shortcuts_switch: false, // Not used
+				widgets_switch: false, // Not used
+				existing_apps_switch: true,
+				dashboard_beta: false,
+			},
+			checkingVersion: false,
+			updateInfo: {
+				current_version: '0',
+				need_update: false,
+				// true from a core whose system image owns updates and packages
+				image_managed: false,
+				version: Object,
+			},
+			isUpdating: false,
+			latestText: 'Currently at the latest version',
+			updateText: 'A new version is available!',
+
+			port: '',
+			autoUsbMount: false,
+			// null until the core answers GET /v1/sys/telemetry: a core without the
+			// route shows no switch that could not work
+			telemetryEnabled: null,
+			// While a PUT is in flight: two answers could come back in the wrong order.
+			telemetrySaving: false,
+			// The view of GET /v1/sys/autoupdate: { enabled, window: { start, end },
+			// state, next, last }. null until the core answers: a core older than the
+			// feature shows no row.
+			autoUpdate: null,
+			autoUpdateSaving: false,
+			// true once the core answers GET /v1/sys/alerts: a core older than the
+			// feature shows no row.
+			alertsAvailable: false,
+			// false until the box answers; an older one has no sync call and 404s
+			showFolderSync: false,
+			logsAvailable: false,
+			// true once the core answers GET /v1/fleet: a core older than the
+			// feature shows no row.
+			fleetAvailable: false,
+			// true once the core answers GET /v1/sys/modules: a core older than the
+			// feature shows no row.
+			modulesAvailable: false,
+			// The view of GET /v1/sys/os. null until the core answers: a core older than
+			// the feature, or a call that failed, shows no badge.
+			os: null,
+			// The window's two selects: whole hours, 00:00 to 23:00.
+			hours: Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`),
+			deviceModel: '',
+			// Language Sets
+			languages: Object.entries(messages).map(([key, value]) => ({
+				lang: key,
+				name: value.lang_name,
+			})),
+			// The new login page: the box keeps it (the login page has no session
+			// to read barData with); the router read it from the status already
+			loginBeta: this.$store.state.loginStyle === 'beta',
+			loginBetaSaving: false,
+			// Appearance: kept in localStorage, never in barData - the login page
+			// needs it before any user exists, and the server copy would overwrite it.
+			theme: readThemePreference(),
+			themes: [
+				{ value: 'light', label: 'Light' },
+				{ value: 'dark', label: 'Dark' },
+				{ value: 'system', label: 'Follow the system' },
+			],
+			// Search Engine Sets
+			searchEngines: [
+				{ url: 'https://duckduckgo.com/?q=', name: 'DuckDuckGo' },
+				{ url: 'https://www.google.com/search?q=', name: 'Google' },
+				{ url: 'https://www.bing.com/search?q=', name: 'Bing' },
+				{ url: 'https://www.startpage.com/do/search?cat=web&pl=chrome&query=', name: 'StartPage' },
+				{ url: 'https://search.brave.com/search?source=web&q=', name: 'Brave' },
+			],
+			restart: 'Restart',
+			shutdown: 'Shutdown',
+			terminalFullScreen: opensFullScreen(),
+			showPower: false,
+			showPowerTitle: '',
+			showPowerMessage: '',
+		}
+	},
+	computed: {
+		canWrite() {
+			return this.$store.getters.canWrite
+		},
+		readsAModule() {
+			return readsAModule(this.$store.getters)
+		},
+		sidebarIcon() {
+			return this.$store.state.sidebarOpen ? 'close-outline' : 'menu-outline'
+		},
+		sidebarIconLabel() {
+			return this.$store.state.sidebarOpen ? 'Hide Sidebar' : 'Show SideBar'
+		},
+		isRaspberryPi() {
+			return this.deviceModel.toLowerCase().includes('raspberry')
+		},
+		// The badge for the system's end of support, or null. Its date is in the language of
+		// the window it opens, which falls back to English like the window does.
+		osSupportBadge() {
+			return osBadge(this.os, this.$te('Operating system', this.$i18n.locale) ? this.$i18n.locale : 'en_us')
+		},
+		// The automatic update's state line. Paused is always the last attempt's
+		// version: its second failure is what paused it.
+		autoUpdateStateText() {
+			const { state, next, last } = this.autoUpdate
+			switch (state) {
+				case 'up_to_date':
+					return this.$t('Up to date')
+				// without a date for the release, the core never installs it by itself
+				case 'waiting':
+					return next
+						? this.$t('{version} will be installed after {date}', { version: next.version, date: new Date(next.not_before).toLocaleString() })
+						: this.$t('A newer release is out: install it by hand')
+				case 'updating':
+					return this.$t('Updating…')
+				case 'paused':
+					return this.$t('Paused: {version} failed twice', { version: last?.version })
+				default:
+					return ''
+			}
+		},
+	},
+	watch: {
+		// the role confirmed after the first render (nothing stored): the box's state is asked then
+		canWrite(can) {
+			if (can) {
+				this.loadBox()
+			}
+		},
+		'barData.lang': {
+			handler(val, oldValue) {
+				if (val === oldValue) {
+					return
+				}
+				const lang = val.includes('_') ? val : 'en_us'
+				this.$messageBus('dashboardsetting_language', lang)
+				this.setLang(lang)
+			},
+			deep: true,
+		},
+		'barData.search_engine': {
+			handler(val, oldValue) {
+				if (val === oldValue) {
+					return
+				}
+				this.$messageBus('dashboardsetting_searchengine', val.toString())
+				this.$store.commit('SET_SEARCH_ENGINE', val)
+			},
+			deep: true,
+		},
+		'barData.search_switch': {
+			handler(val, oldValue) {
+				if (val === oldValue) {
+					return
+				}
+				this.$messageBus('dashboardsetting_showsearchbar', val.toString())
+				this.$store.commit('SET_SEARCH_ENGINE_SWITCH', val)
+			},
+			deep: true,
+		},
+
+		'barData.recommend_switch': {
+			handler(val) {
+				this.$store.commit('SET_RECOMMEND_SWITCH', val)
+			},
+			deep: true,
+		},
+		initBarData(val) {
+			this.barData = val
+		},
+	},
+	created() {
+		this.barData = this.initBarData
+		// this.getConfig();
+	},
+	mounted() {
+		this.getUserInfo()
+		// what a `user` session never asks: the box's own settings and state
+		this.getLogs()
+		if (this.canWrite) {
+			this.loadBox()
+		}
+		// the notice's Turn off (CoreService) moves the switch too
+		this.$EventBus.$on(events.TELEMETRY_CHANGED, this.onTelemetryChanged)
+		// the tab bar of the beta dashboard on a phone
+		this.$EventBus.$on('casaUI:openSettings', this.toggleSettings)
+	},
+	beforeUnmount() {
+		this.$EventBus.$off(events.TELEMETRY_CHANGED, this.onTelemetryChanged)
+		this.$EventBus.$off('casaUI:openSettings', this.toggleSettings)
+	},
+
+	methods: {
+		// the box's settings, versions and probes: the owner's, once
+		loadBox() {
+			if (this.boxLoaded) {
+				return
+			}
+			this.boxLoaded = true
+			this.getPort()
+			this.checkVersion()
+			this.getUsbStatus()
+			this.getTelemetry()
+			this.getAutoUpdate()
+			this.getAlerts()
+			this.getSync()
+			this.getFleet()
+			this.getModules()
+			this.getOs()
+			this.getHardwareInfo()
+		},
+		/*************************************************
+		 * PART 0  Common
+		 **************************************************/
+		/**
+		 * @description: Save CasaOs Configs
+		 * @param {*}
+		 * @return {*}
+		 */
+		// The box's login page; a box that refuses keeps the switch where it was.
+		async setLoginBeta(value) {
+			const style = value ? 'beta' : 'classic'
+			this.loginBetaSaving = true
+			try {
+				await this.$api.users.setLoginStyle(style)
+				this.$store.commit('SET_LOGIN_STYLE', style)
+			} catch {
+				this.loginBeta = !value
+				this.$buefy.toast.open({
+					message: this.$t('The login page could not be changed'),
+					type: 'is-danger',
+				})
+			} finally {
+				this.loginBetaSaving = false
+			}
+		},
+		async saveData() {
+			const saveRes = await this.$api.users.setCustomStorage(systemConfigName, this.barData)
+			if (saveRes.data.success === 200) {
+				this.barData = saveRes.data.data
+			}
+		},
+
+		/**
+		 * @description: Handle Dropmenu state
+		 * @param {boolean} isOpen
+		 * @return {*}
+		 */
+		setTerminalFullScreen(on) {
+			setOpensFullScreen(on)
+		},
+
+		onOpen(isOpen) {
+			if (isOpen) {
+				this.$store.commit('SET_SIDEBAR_CLOSE')
+				if (this.canWrite) {
+					this.checkVersion()
+					// the night may have moved it: waiting, updating, up to date
+					this.getAutoUpdate()
+				}
+			} else {
+				// Reset the text when the Settings layer closes
+				// this.resetPower(true)
+				this.restart = 'Restart'
+				this.shutdown = 'Shutdown'
+			}
+		},
+
+		/**
+		 * @description: Show SideBar
+		 * @param {*}
+		 * @return {*}
+		 */
+		showSideBar() {
+			this.$store.commit('TOOGLE_SIDEBAR_STATE')
+		},
+
+		/*************************************************
+		 * PART 1-2  Dashboard Setting - Language
+		 **************************************************/
+
+		/**
+		 * @description: Get Initnal Language
+		 * @param {*}
+		 * @return {string} lang
+		 */
+		getInitLang() {
+			let lang = localStorage.getItem('lang') ? localStorage.getItem('lang') : this.getLangFromBrowser()
+			lang = lang.includes('_') ? lang : 'en_us'
+			return lang
+		},
+
+		/*************************************************
+		 * PART 1-2b  Dashboard Setting - Appearance
+		 **************************************************/
+		setThemePreference(value) {
+			setThemePreference(value)
+		},
+
+		/*************************************************
+		 * PART 1-3  Dashboard Setting - Web UI Port
+		 **************************************************/
+
+		/**
+		 * @description: Get CasaOs WebUI port
+		 * @return {*}
+		 */
+		getPort() {
+			this.$api.sys.getServerPort().then((res) => {
+				if (res.data.success == 200) {
+					this.port = res.data.data
+				}
+			})
+		},
+
+		toggleSettings() {
+			this.$refs.settingsDrop.toggle()
+		},
+
+		// The apps that update by themselves at night.
+		showAppAutoUpdate() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: defineAsyncComponent(() => import('./settings/AppAutoUpdateModal.vue')),
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		// What apps left behind on the disk, and deleting it.
+		showDockerCleanup() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: defineAsyncComponent(() => import('./settings/DockerCleanupModal.vue')),
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		// Where Docker keeps images, containers and volumes, and moving them.
+		showDockerLocation() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				// loaded when first opened: it brings the folder picker along
+				component: defineAsyncComponent(() => import('./settings/DockerLocationModal.vue')),
+				hasModalCard: true,
+				trapFocus: true,
+				// a move under way cannot be walked away from by accident
+				canCancel: [],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		// The accounts network shares open with, and the folders each opens.
+		showShareAccounts() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: defineAsyncComponent(() => import('./filebrowser/shared/SambaUsersModal.vue')),
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		showBackupDestinations() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: BackupDestinations,
+				hasModalCard: true,
+				customClass: 'backup-modal',
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		showCloudSync() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: CloudSync,
+				hasModalCard: true,
+				customClass: 'backup-modal',
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		// Asked once, with the box's other probes: only a 404 hides the entry.
+		getSync() {
+			this.$api.sync.getTasks().then(() => {
+				this.showFolderSync = true
+			}).catch((error) => {
+				this.showFolderSync = syncAvailable(error)
+			})
+		},
+
+		// Asked once, from mounted(): the dialog reads the channels itself.
+		getAlerts() {
+			this.$api.sys.getAlerts().then(() => {
+				this.alertsAvailable = true
+			}).catch(() => {})
+		},
+
+		showAlerts() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: AlertsModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		// Asked once, from mounted(): an AppManagement older than the feature shows no row. Loaded here, not at the
+		// top, like the fleet's client below.
+		getLogs() {
+			return import('@/components/Logs/entry').then(({ hasLogs }) => hasLogs()).then((available) => {
+				this.logsAvailable = available
+			})
+		},
+
+		showLogsSettings() {
+			this.$refs.settingsDrop.toggle()
+			return import('./settings/LogsSettingsModal.vue').then(({ default: LogsSettingsModal }) => {
+				this.$buefy.modal.open({
+					component: LogsSettingsModal,
+					hasModalCard: true,
+					trapFocus: true,
+					canCancel: ['escape'],
+					scroll: 'keep',
+					animation: 'zoom-in',
+				})
+			})
+		},
+
+		// Asked once, from mounted(): the dialog reads the roles itself. The client is
+		// loaded here, not at the top: the bar must not pull the store in through it.
+		getFleet() {
+			return import('@/service/fleet').then(({ fleetApi }) => fleetApi.status()).then(() => {
+				this.fleetAvailable = true
+			}).catch(() => {})
+		},
+
+		showAccounts() {
+			this.$refs.settingsDrop.toggle()
+			return import('./settings/AccountsModal.vue').then(({ default: AccountsModal }) => {
+				this.$buefy.modal.open({
+					component: AccountsModal,
+					hasModalCard: true,
+					trapFocus: true,
+					canCancel: ['escape'],
+					scroll: 'keep',
+					animation: 'zoom-in',
+				})
+			})
+		},
+
+		// The dialog is loaded when opened, for the same reason.
+		showFleet() {
+			this.$refs.settingsDrop.toggle()
+			return import('./settings/FleetModal.vue').then(({ default: FleetModal }) => {
+				this.$buefy.modal.open({
+					component: FleetModal,
+					hasModalCard: true,
+					trapFocus: true,
+					canCancel: ['escape'],
+					scroll: 'keep',
+					animation: 'zoom-in',
+				})
+			})
+		},
+
+		showRemoteAccess() {
+			this.$refs.settingsDrop.toggle()
+			return import('./settings/RemoteAccessModal.vue').then(({ default: RemoteAccessModal }) => {
+				this.$buefy.modal.open({
+					component: RemoteAccessModal,
+					hasModalCard: true,
+					trapFocus: true,
+					canCancel: ['escape'],
+					scroll: 'keep',
+					animation: 'zoom-in',
+				})
+			})
+		},
+
+		// Asked once, from mounted(): the window reads the list itself. The row shows only
+		// when something is offered, or when something is installed (to be managed).
+		getModules() {
+			this.$api.sys.getModules().then((res) => {
+				const d = res?.data?.data
+				const list = Array.isArray(d?.modules) ? d.modules : []
+				this.modulesAvailable = (d?.catalogue?.ok === true && list.length > 0) || list.some(m => m.installed)
+			}).catch(() => {})
+		},
+
+		// Buefy's own autoFocus is off: it would move the focus to the window's frame,
+		// and the window puts it on its heading.
+		showModules() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: ModulesModal,
+				hasModalCard: true,
+				trapFocus: true,
+				autoFocus: false,
+				ariaRole: 'dialog',
+				ariaModal: true,
+				ariaLabel: this.$t('Modules'),
+				canCancel: ['escape', 'outside'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		// Asked once, from mounted(). Nothing is shown unless the core answers with a
+		// state that calls for a badge: an older core (404) and a failed call are silent.
+		getOs() {
+			this.$api.sys.getOs().then((res) => {
+				this.os = res.data.data
+			}).catch(() => {})
+		},
+
+		// Buefy's own autoFocus is off: it would move the focus to the window's frame,
+		// and the window puts it on its heading. The badge gets the focus back when the
+		// window closes, by Escape, a click outside or its Close button.
+		showOsSupport(event) {
+			const opener = event?.currentTarget
+			const back = () => opener?.focus?.()
+			this.$buefy.modal.open({
+				component: OsSupportModal,
+				hasModalCard: true,
+				trapFocus: true,
+				autoFocus: false,
+				ariaRole: 'dialog',
+				ariaModal: true,
+				ariaLabel: this.$t('Operating system'),
+				canCancel: ['escape', 'outside'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				props: {
+					os: this.os,
+				},
+				onCancel: back,
+				events: { close: back },
+			})
+		},
+
+		/**
+		 * @description: Show Port panel
+		 * @return {*}
+		 */
+		showPortPanel() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: PortPanel,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				props: {
+					initPort: this.port,
+				},
+			})
+		},
+		showChangeWallpaperModal() {
+			this.$EventBus.$emit(events.SHOW_CHANGE_WALLPAPER_MODAL)
+			this.$refs.settingsDrop.toggle()
+		},
+
+		/*************************************************
+		 * PART 1-4  Dashboard Setting - Auto USB Mount Switch
+		 **************************************************/
+		/**
+		 * @description: Get Auto USB Mount State
+		 * @return {*}
+		 */
+		getUsbStatus() {
+			this.$api.sys.getUsbStatus().then((res) => {
+				if (res.data.success == 200) {
+					this.autoUsbMount = res.data.data === 'True'
+				}
+			})
+		},
+
+		/**
+		 * @description: Enable or Disable USB Auto Mount
+		 * @param {*}
+		 * @return {*}
+		 */
+		usbAutoMount() {
+			if (this.autoUsbMount) {
+				this.$messageBus('dashboardsetting_automountusb', true.toString())
+				this.$api.sys.toggleUsbAutoMount({ state: 'on' })
+				// Show
+				if (this.isRaspberryPi) {
+					this.$buefy.snackbar.open({
+						message: this.$t(
+							'Enabling this function may cause boot failures when the Raspberry Pi device is booted from USB',
+						),
+						type: 'is-warning',
+						position: 'is-top',
+					})
+				}
+			} else {
+				this.$messageBus('dashboardsetting_automountusb', false.toString())
+				this.$api.sys.toggleUsbAutoMount({ state: 'off' })
+			}
+		},
+
+		/*************************************************
+		 * PART 1-4b  Dashboard Setting - Anonymous statistics
+		 **************************************************/
+		// Asked once, from mounted(). The row stays hidden until the core answers,
+		// so the switch cannot be flipped while this is in flight.
+		getTelemetry() {
+			this.$api.sys.getTelemetry().then((res) => {
+				this.telemetryEnabled = res.data.data.enabled
+			}).catch(() => {})
+		},
+
+		// The core's `enabled` after the notice's PUT (CoreService).
+		onTelemetryChanged(enabled) {
+			this.telemetryEnabled = enabled
+		},
+
+		// Using the switch shows the owner knows, so it also marks the notice seen:
+		// an owner who opts in here is not told about it at the next login.
+		// The switch ends where the core says it is: a refused PUT puts it back.
+		async setTelemetry(enabled) {
+			this.telemetryEnabled = enabled
+			this.telemetrySaving = true
+			try {
+				const res = await this.$api.sys.setTelemetry({ enabled, notice_seen: true })
+				this.telemetryEnabled = res.data.data.enabled
+			} catch {
+				this.telemetryEnabled = !enabled
+				this.$buefy.toast.open({
+					message: this.$t('The setting could not be saved.'),
+					type: 'is-danger',
+				})
+			} finally {
+				this.telemetrySaving = false
+			}
+		},
+
+		showTelemetryPreview() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: TelemetryPreviewModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape', 'outside'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+		/**
+		 * @description: Get Hardware Info etc. Board Info
+		 * @param {*}
+		 * @return {*}
+		 */
+		getHardwareInfo() {
+			this.$api.sys.hardwareInfo().then((res) => {
+				if (res.data.success == 200) {
+					this.deviceModel = res.data.data.drive_model
+					localStorage.setItem('arch', res.data.data.arch || '')
+				}
+			})
+		},
+
+		/*************************************************
+		 * PART 1-5  Dashboard Setting - Update
+		 **************************************************/
+
+		/**
+		 * @description: Get Version info
+		 * @return {*} void
+		 */
+		checkVersion(refresh = false) {
+			this.checkingVersion = refresh
+			this.$api.sys.getVersion(refresh).then((res) => {
+				if (res.data.success === 200) {
+					this.updateInfo = res.data.data
+					if (res.data.data.need_update) {
+						this.$messageBus('dashboardsetting_versionavailable_show', true.toString())
+					}
+				}
+			}).catch(() => {}).finally(() => {
+				this.checkingVersion = false
+			})
+		},
+
+		/**
+		 * @description: Open Update Modal
+		 * @return {*} void
+		 */
+		showUpdateModal() {
+			this.$messageBus('dashboardsetting_versionupdate', true.toString())
+			this.$buefy.modal.open({
+				component: UpdateModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				props: {
+					changeLog: this.updateInfo.version.change_log,
+				},
+			})
+		},
+
+		/*************************************************
+		 * PART 1-5b  Dashboard Setting - Automatic update
+		 **************************************************/
+		// Kept as it was when the core cannot be asked: an older core never shows
+		// the row, and a blip once it is shown does not take it away.
+		getAutoUpdate() {
+			this.$api.sys.getAutoUpdate().then((res) => {
+				this.autoUpdate = res.data.data
+			}).catch(() => {})
+		},
+
+		// change: any of { enabled, window_start, window_end, resume }. The row moves
+		// at once and ends where the core says it is: a refused PUT puts it back.
+		async setAutoUpdate(change) {
+			const before = this.autoUpdate
+			this.autoUpdate = {
+				...before,
+				enabled: change.enabled ?? before.enabled,
+				window: {
+					start: change.window_start ?? before.window.start,
+					end: change.window_end ?? before.window.end,
+				},
+			}
+			this.autoUpdateSaving = true
+			try {
+				const res = await this.$api.sys.setAutoUpdate(change)
+				this.autoUpdate = res.data.data
+			} catch {
+				this.autoUpdate = before
+				this.$buefy.toast.open({
+					message: this.$t('The setting could not be saved.'),
+					type: 'is-danger',
+				})
+			} finally {
+				this.autoUpdateSaving = false
+			}
+		},
+
+		// The upgrade log the night's attempts wrote, in the update dialog's own view.
+		showUpgradeLog() {
+			this.$refs.settingsDrop.toggle()
+			this.$buefy.modal.open({
+				component: UpdateModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				props: {
+					logOnly: true,
+				},
+			})
+		},
+
+		/**
+		 * @description: Open the operating system package update modal
+		 * @return {*} void
+		 */
+		showSystemPackageUpdateModal() {
+			this.$messageBus('dashboardsetting_systempackages')
+			this.$buefy.modal.open({
+				component: SystemPackageUpdateModal,
+				hasModalCard: true,
+				customClass: 'network-storage-modal',
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		/**
+		 * @description: Open the app launching settings modal
+		 * @return {*} void
+		 */
+		showAppLaunchModal() {
+			this.$buefy.modal.open({
+				component: AppLaunchModal,
+				hasModalCard: true,
+				customClass: 'network-storage-modal',
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		/*************************************************
+		 * PART 2  Userinfo
+		 **************************************************/
+		/**
+		 * @description: Get user info
+		 * @return {*} void
+		 */
+		async getUserInfo() {
+			this.userInfo = this.$store.state.user
+			this.$store.commit('SET_SIDEBAR_CLOSE')
+			// always asked: the stored role gets the first render right, the server has the last word
+			try {
+				const userRes = await this.$api.users.getUserInfo()
+				this.userInfo = userRes.data.data
+				this.$store.commit('SET_USER', this.userInfo)
+				localStorage.setItem('user', JSON.stringify(this.userInfo))
+			} catch (error) {
+				console.error(error)
+				// once more shortly after: a role that never arrives would leave the account's own controls guessing
+				if (!this.userRetried) {
+					this.userRetried = true
+					setTimeout(() => this.getUserInfo(), 3000)
+				} else {
+					this.$store.commit('SET_ROLE_UNCONFIRMED')
+				}
+			}
+		},
+		/*************************************************
+		 * PART 3  Terminal
+		 **************************************************/
+
+		/**
+		 * @description: Show Terminal panel
+		 * @return {*} void
+		 */
+		showTerminalPanel() {
+			this.$messageBus('terminallogs')
+			this.$store.commit('SET_SIDEBAR_CLOSE')
+			this.$buefy.modal.open({
+				component: TerminalPanel,
+				hasModalCard: true,
+				customClass: 'terminal-modal',
+				trapFocus: true,
+				canCancel: [],
+				scroll: 'keep',
+				animation: 'zoom-in',
+			})
+		},
+
+		power(key) {
+			if (this[key.toLowerCase()] !== 'Are you sure?') {
+				this[key.toLowerCase()] = 'Are you sure?'
+				return
+			}
+			this.$refs.settingsDrop.toggle()
+			this.showPower = true
+			switch (key) {
+				case 'Restart':
+					this.$messageBus('dashboardsetting_reboot')
+					this[key.toLowerCase()] = key
+					this.showPowerTitle = 'Restarting now'
+					this.showPowerMessage = 'Please wait for about 90 seconds.'
+					break
+				case 'Shutdown':
+					this.$messageBus('dashboardsetting_shutdown')
+					this[key.toLowerCase()] = key
+					this.showPowerTitle = 'Now shutting down'
+					this.showPowerMessage = 'Please wait for about 30 seconds before cutting off the power.'
+					break
+			}
+			let timer
+			const path = key === 'Shutdown' ? 'off' : 'restart'
+			this.$api.sys.power(path).then((res) => {
+				if (res.data.success !== 200) {
+					throw new Error(res.data.message || 'Failed to perform power operation.')
+				}
+
+				this.showPowerMessage = res.data.data
+				if (path === 'off') {
+					return
+				}
+				timer = setInterval(() => {
+					this.$api.users.getUserStatus().then((res) => {
+						if (res.data.data.initialized) {
+							clearInterval(timer)
+							location.reload()
+						}
+					})
+				}, 30000)
+			}).catch((error) => {
+				clearInterval(timer)
+				this.resetPower()
+				// a sentence of the language files, whatever failed, and never the core's own words, which a toast would show as HTML: an upgrade of
+				// the operating system that works on the machine, or a restart that would not come back, has its own
+				const refusal = powerRefusal(error)
+				this.$buefy.toast.open({
+					message: escape(refusal ? this.$t(refusal.key, refusal.params) : this.$t('Failed to perform power operation.')),
+					type: 'is-danger',
+				})
+			})
+		},
+		resetPower() {
+			this.showPower = false
+			this.restart = 'Restart'
+			this.shutdown = 'Shutdown'
+		},
+	},
+}
+</script>
+
+<style lang="scss">
+// A group of settings on one raised card, its rows parted by hairlines: the
+// panel reads as three blocks rather than a column of thirty lines.
+._settings-section {
+	margin: 0 1rem;
+	background: var(--casa-surface-card);
+	border: 1px solid var(--casa-divider-soft);
+	border-radius: 12px;
+	overflow: hidden;
+}
+
+._row {
+	padding: 0.625rem 0.5rem 0.625rem 0;
+
+	& + ._row {
+		border-top: 1px solid var(--casa-divider-soft);
+	}
+
+	&:hover {
+		background: var(--casa-hover-tint);
+	}
+
+	// the icon on a small tinted tile; the lines under a label still start where the label does
+	._is-normal > .icon:first-child {
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 8px;
+		background: var(--casa-hover-tint);
+	}
+
+	.pl-55 {
+		padding-left: 2.25rem;
+	}
+}
+
+._box {
+	height: 2.5rem;
+}
+
+// On a PC the three groups sit side by side: the panel is wide and short instead
+// of a column that scrolls. Below 1024px Buefy shows the menu as a modal, stacked.
+@media screen and (min-width: 1024px) {
+	._settings-columns {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		align-items: start;
+	}
+
+	// a label wraps in its column rather than widening the panel
+	._settings-column ._is-normal.is-flex-grow-1 {
+		min-width: 0;
+		white-space: normal;
+	}
+
+	._settings-column ._box {
+		height: auto;
+		min-height: 2.5rem;
+	}
+}
+
+._footer {
+	height: 3.5rem;
+	border-top: 1px solid var(--casa-divider);
+}
+
+._title {
+	font-family: $family-sans-serif;
+	font-size: 1rem;
+	font-weight: 500;
+	line-height: 1.5rem;
+	letter-spacing: 0em;
+	text-align: left;
+	padding: 1.25rem 1.25rem 0.5rem 1.5rem;
+	border-bottom: 1px solid var(--casa-divider);
+}
+
+._is-normal {
+	font-family: $family-sans-serif;
+	font-size: 0.875rem;
+	font-weight: 400;
+	line-height: 1.25rem;
+	letter-spacing: 0em;
+	text-align: left;
+}
+
+._has-text-attention {
+	color: var(--casa-text-attention);
+}
+
+// A line under a row's title that may be long: it wraps at the panel's width
+// instead of setting it, the panel being as wide as its widest line.
+._is-wrap {
+	white-space: normal;
+	contain: inline-size;
+}
+
+// the heading of a group of rows, in line with the rows' icons
+._settings-group {
+	margin: 1rem 1.5rem 0.375rem;
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1rem;
+	color: var(--casa-text-hint);
+}
+
+._fixed-height {
+	height: 2.75rem;
+	min-height: 2.75rem;
+}
+
+.top-bar {
+	position: relative;
+	z-index: 20;
+	height: 2.75rem;
+	background: var(--casa-surface);
+
+	.navbar-brand {
+		margin-left: 1.25rem;
+
+		.picon {
+			cursor: pointer;
+		}
+
+		.navbar-item {
+			height: 2.75rem;
+			padding: 0.75rem 0.75rem 0.5rem;
+
+			.icon {
+				&:only-child {
+					margin-left: 0;
+					margin-right: 0;
+				}
+			}
+		}
+
+		.dropdown + .dropdown {
+			margin-left: 0;
+		}
+
+		.dropdown-trigger,
+		.tooltip-trigger {
+			height: 1.5rem;
+		}
+
+		.dropdown-menu {
+			margin-top: 0.5rem;
+			// on a phone, the width Buefy leaves the panel, with its margins
+			min-width: min(22.5rem, calc(100vw - 2rem));
+
+			.dropdown-content {
+				background: var(--casa-surface);
+				border-radius: 10px;
+				// Taller than the window, the settings scroll down to Shutdown. On a
+				// desktop only: below 1024px Buefy's mobile modal scrolls the menu
+				// itself, and a second cap here scrolled inside it.
+				@media screen and (min-width: 1024px) {
+					max-height: calc(100vh - 4rem);
+				}
+
+				.dropdown-item {
+					padding: 0.875rem 1.25rem;
+					text-align: left;
+
+					.item {
+						height: 2rem;
+					}
+				}
+			}
+		}
+
+		// only the settings panel is wide on a PC; the Account menu keeps its own width (#106)
+		.settings-drop .dropdown-menu {
+			@media screen and (min-width: 1024px) {
+				width: min(72rem, calc(100vw - 5.5rem));
+			}
+		}
+	}
+
+	.set-select {
+		.select {
+			&::after {
+				border-color: var(--casa-control-border) !important;
+			}
+		}
+
+		select {
+			background-color: transparent !important;
+			border-color: var(--casa-control-border) !important;
+
+			// Chromium paints the native list on the select's own background, which
+			// is transparent here: white, under dark's light text. Give the options
+			// a surface of their own.
+			option {
+				background-color: var(--casa-surface);
+				color: var(--casa-text);
+			}
+		}
+	}
+
+	// the selects of the rows, one width: Language and Appearance line up
+	._box .set-select select {
+		min-width: 9.5rem;
+	}
+
+	// a label keeps its distance from its control: the widest row sets the
+	// panel's width, and would otherwise run into its switch
+	.dropdown-item ._is-normal.is-flex-grow-1 {
+		padding-right: 1rem;
+	}
+
+	// In Buefy's mobile modal the panel has the phone's width, not its widest
+	// row's: a long label wraps and its row grows, instead of pushing its
+	// control off the panel.
+	@media screen and (max-width: 1023px) {
+		.dropdown-item ._is-normal.is-flex-grow-1 {
+			min-width: 0;
+			white-space: normal;
+		}
+
+		._box {
+			height: auto;
+			min-height: 2.5rem;
+		}
+	}
+
+	.field {
+		line-height: 1rem;
+	}
+
+	.switch {
+		&.is-flex-direction-row-reverse {
+			.control-label {
+				padding-left: 0;
+				padding-right: calc(0.75em - 1px);
+			}
+		}
+
+		// TODO: remove this when the switch to be component.
+		&._small input[type="checkbox"] {
+			& + .check {
+				width: 2.286em;
+				height: 1.429em;
+				padding: 0;
+
+				&::before {
+					width: 1.143em;
+					height: 1.143em;
+					margin-left: 2px;
+					margin-right: 2px;
+				}
+			}
+
+			&:checked + .check {
+				&::before {
+					transform: translate3d(80%, 0, 0);
+				}
+			}
+		}
+	}
+
+	.button {
+		&.is-small {
+			height: 2em;
+		}
+
+		// a tint with a hairline rather than a dark pill lost on the dark panel
+		&.is-dark {
+			background: var(--casa-hover-tint);
+			border: 1px solid var(--casa-divider);
+			color: var(--casa-text);
+
+			&:hover {
+				background: var(--casa-active);
+			}
+		}
+	}
+
+	.icon {
+		color: var(--casa-text-secondary);
+	}
+}
+
+// The badge of a system whose security updates have ended or end soon: the text in
+// the ordinary text colour on a tint, so it reads at AA in both themes; the border
+// and the icon carry the colour (amber, then the app's red-orange for ended).
+.top-bar .os-support-badge {
+	--os-badge-signal: var(--casa-text-warning);
+
+	display: inline-flex;
+	align-items: center;
+	// the brand row stretches its children to the bar's height: a pill, not a block
+	align-self: center;
+	flex-shrink: 1;
+	gap: 0.25rem;
+	// The icons before it take up to 12rem on a phone: the text wraps to a second line
+	// rather than leave the screen (it is longer in French).
+	max-width: calc(100vw - 12.5rem);
+	min-width: 0;
+	min-height: 2rem;
+	padding: 0.125rem 0.625rem 0.125rem 0.375rem;
+	border: 1px solid var(--os-badge-signal);
+	border-radius: 9999px;
+	background: var(--casa-warning-tint);
+	color: var(--casa-text);
+	font-size: 0.75rem;
+	line-height: 1.1;
+	text-align: left;
+	white-space: normal;
+	cursor: pointer;
+
+	&.is-danger {
+		--os-badge-signal: var(--casa-text-attention);
+
+		background: var(--casa-danger-tint);
+	}
+
+	&.is-neutral {
+		--os-badge-signal: var(--casa-text-muted);
+
+		border-color: var(--casa-border-strong);
+		background: var(--casa-surface-raised);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--os-badge-signal);
+		outline-offset: 2px;
+	}
+
+	.icon {
+		flex-shrink: 0;
+		color: var(--os-badge-signal);
+	}
+}
+
+// the "check for updates" icon next to the version: a bare button, as quiet as the text around it
+._check-updates {
+	display: flex;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	opacity: 0.6;
+	cursor: pointer;
+
+	&:hover:not(:disabled),
+	&:focus-visible {
+		opacity: 1;
+	}
+}
+
+.update-text-dot {
+	position: relative;
+
+	&::after {
+		content: "";
+		position: absolute;
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		background-color: $danger;
+		right: -0.5rem;
+		top: 0rem;
+	}
+}
+
+.update-icon-dot {
+	position: relative;
+
+	&::after {
+		content: "";
+		position: absolute;
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		background-color: $danger;
+		right: 0;
+		top: 0;
+	}
+}
+
+#sidebar-btn {
+	display: none !important;
+}
+
+@media screen and (max-width: 480px) {
+	#sidebar-btn {
+		display: flex !important;
+	}
+}
+
+// TODO
+._is-normal {
+	/* Text 400Regular/Text03 */
+	font-family: $family-sans-serif;
+	font-style: normal;
+	font-weight: 400;
+	font-size: 0.875rem;
+	line-height: 1.25rem;
+	/* or 143% */
+	font-feature-settings: "pnum" on, "lnum" on;
+}
+
+._has-background-blue {
+	background: hsla(208, 100%, 75%, 1);
+}
+
+._modal {
+	.modal-content {
+		border-radius: 0.625rem;
+
+		.message {
+			margin-bottom: 0rem;
+			border-radius: 0rem;
+
+			.message-header {
+				background: var(--casa-surface);
+				border-bottom: 1px solid var(--casa-border-faint);
+				//margin-top: 1.25rem;
+				//margin-left: 1.5rem;
+				padding: 1.25rem 1.5rem 0.75rem 1.5rem;
+
+				> div {
+					display: flex;
+					//align-items: center;
+					justify-content: center;
+					vertical-align: middle;
+
+					color: var(--casa-text);
+
+					font-family: $family-sans-serif;
+					font-size: 1rem;
+					font-weight: 500;
+					line-height: 1.5rem;
+					letter-spacing: 0em;
+					text-align: left;
+					font-feature-settings: "pnum" on, "lnum" on;
+
+					.is-24x24 {
+						width: 1.5rem;
+						height: 1.5rem;
+					}
+				}
+
+				> button {
+					width: 1.5rem;
+					height: 1.5rem;
+					max-height: 1.5rem;
+					max-width: 1.5rem;
+					min-height: 1.5rem;
+					min-width: 1.5rem;
+					display: none;
+				}
+			}
+
+			.message-body {
+				background: var(--casa-surface);
+				padding-top: 1rem;
+				padding-bottom: 1rem;
+			}
+		}
+
+		footer {
+			background: var(--casa-surface);
+			border: 1px solid var(--casa-border-faint);
+
+			button {
+				border-radius: 0.875rem;
+				border: none;
+				color: hsla(0, 0%, 100%, 1);
+				height: 2rem;
+
+				img {
+					width: 1.25rem;
+					height: 1.25rem;
+				}
+			}
+		}
+	}
+}
+</style>

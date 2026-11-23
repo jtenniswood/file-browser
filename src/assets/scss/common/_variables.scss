@@ -1,0 +1,114 @@
+// Bulma 1 configuration.
+//
+// These @forward/@use rules MUST stay the first thing in this file:
+// style-resources-loader pastes this file's text at the top of every
+// lang="scss" block in the app, and a @use after any other rule is a hard
+// error. `@forward ... with` is also the only channel that reaches Bulma 1's
+// internals - Bulma 1 is a Sass module, so a plain variable assignment before
+// an @import compiles clean and is silently thrown away.
+@forward "bulma/sass/utilities/initial-variables" with (
+	// Bulma 1 moved the neutral ramp from hsl(0, 0%, x) to hsl(221, 14%, x) and
+	// repainted four accents ($yellow, $cyan, $blue, $red). This app has 132
+	// is-danger, 60 is-success and 23 is-warning call sites, plus 28 reads of
+	// $grey and 13 of $white in its own SCSS, so the swap is pinned to the
+	// palette release/v0.4.43 actually emits. Repainting any of it is a design
+	// decision to take on its own, not a side effect of the migration.
+	//
+	// $scheme-h / $scheme-s drive the themed surfaces (card, dropdown, menu,
+	// message, modal, navbar) and are enough on their own for those. The
+	// neutral ramp is NOT derived from them - Bulma 1 writes hsl(221, 14%, x)
+	// literally into each of the twelve names below - so holding the ramp means
+	// naming all twelve. Delete this block, and only this block, the day the
+	// design signs off on Bulma 1's blue-cast greys.
+	$scheme-h: 0,
+	$scheme-s: 0%,
+	$black: hsl(0, 0%, 4%),
+	$black-bis: hsl(0, 0%, 7%),
+	$black-ter: hsl(0, 0%, 14%),
+	$grey-darker: hsl(0, 0%, 21%),
+	$grey-dark: hsl(0, 0%, 29%),
+	$grey: hsl(0, 0%, 48%),
+	$grey-light: hsl(0, 0%, 71%),
+	$grey-lighter: hsl(0, 0%, 86%),
+	$grey-lightest: hsl(0, 0%, 93%),
+	$white-ter: hsl(0, 0%, 96%),
+	$white-bis: hsl(0, 0%, 98%),
+	$white: hsl(0, 0%, 100%),
+	$yellow: hsl(44, 100%, 77%),
+	$cyan: hsl(207, 61%, 53%),
+	$blue: hsl(229, 53%, 53%),
+	$red: hsl(348, 86%, 61%),
+	$family-sans-serif: (-apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "Noto Sans", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", "微软雅黑", sans-serif),
+	// 1304px + 2 * $gap, as this app has always defined it. Bulma 1's own
+	// default is 1344px + 2 * $gap.
+	$fullhd: 1368px
+);
+@forward "bulma/sass/utilities/derived-variables" with (
+	$primary: hsl(216, 90%, 54%),
+	$link: hsl(216, 90%, 54%),
+	$custom-colors: (
+		"grey": (hsla(208, 14%, 58%, 1), hsl(0, 0%, 100%)),
+		"facebook": (#1977F3, hsl(0, 0%, 100%)),
+		"twitter": (#1D9BF0, hsl(0, 0%, 100%)),
+		"reddit": (#FF4500, hsl(0, 0%, 100%))
+	)
+);
+
+// `as *` is what keeps the 25 partials and the 95 SFC style blocks writing bare
+// $primary, $white, $grey, $danger, $family-sans-serif, @include mobile and
+// bulmaFindDarkColor(). Under Bulma 0.9 this file re-declared ~100 of Bulma's
+// own variables with !default; the import on its first line made every one of
+// them a no-op, so they were documentation, not configuration. Reading them
+// from the module instead means there is one definition of $grey again.
+@use "bulma/sass/utilities/initial-variables" as *;
+@use "bulma/sass/utilities/derived-variables" as *;
+@use "bulma/sass/utilities/functions" as *;
+@use "bulma/sass/utilities/mixins" as *;
+
+// CasaOS greys. Not a Bulma ramp - these are the design system's own steps.
+$grey-100: hsla(208, 16%, 96%, 1);
+$grey-200: hsla(208, 16%, 94%, 1);
+$grey-300: hsla(208, 16%, 91%, 1);
+$grey-400: hsla(208, 16%, 85%, 1);
+$grey-600: hsla(208, 14%, 58%, 1);
+$gray-800: hsla(208, 20%, 20%, 1);
+$gray-font: rgba(144, 149, 153, 1);
+
+// Bulma 1 dropped $primary-light and $primary-dark - it exposes them only as
+// the CSS custom properties --bulma-primary-light / --bulma-primary-dark. The
+// 7 read sites (Files hover/selection, the tour step header, two snackbar
+// button hovers) still want Sass values, so keep computing them here from the
+// same input and the same function as before.
+$primary-light: bulmaFindLightColor($primary);
+$primary-dark: bulmaFindDarkColor($primary);
+
+$ghost: $primary;
+
+// BackDrop
+$backDropColor: rgba(53, 54, 58, 0.4);
+$backDropBlur: blur(5px) saturate(180%);
+$backDropBorder: none;
+$backDropBorderRadius: 10px;
+$backDropShadow: rgb(255 255 255 / 12.5%) 0.5px 1px 1px 0px inset;
+
+// Avatar
+$avatar-border-color: hsl(0, 0%, 89%);
+
+// Buefy variables. Global under Buefy 0.9, module-scoped in Buefy 3.1: the
+// copies below are what this app's own partials read, and app.scss passes the
+// same values to Buefy itself through `@use ... with`. Both are needed.
+$speed-slow: 150ms;
+$speed-slower: 250ms;
+
+$loading-icon-size: 2.5rem;
+$sidebar-width: 22.5rem;
+
+$toast-border-radius: 6px;
+$toast-opacity: 1;
+$toast-box-shadow: 0px 16px 32px -8px rgba(28, 31, 34, 0.12);
+
+$snackbar-background-color: $white;
+$snackbar-color: $gray-800;
+$snackbar-border-radius: 6px;
+$snackbar-button-text-transform: none;
+$snackbar-box-shadow: 0px 16px 32px rgba(28, 31, 34, 0.12);

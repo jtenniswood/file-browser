@@ -1,0 +1,118 @@
+/**
+ * The fields each backend usually wants, and nothing more.
+ *
+ * These are suggestions, not a schema. rclone decides what a backend needs and
+ * gains options between releases; a closed list maintained here would be wrong the
+ * first time that happened, and would stop someone configuring a backend this file
+ * has never heard of. So picking a backend fills the key names in and the rows
+ * stay editable, including the ones nobody suggested.
+ *
+ * Field names are rclone's own, which is the point of showing them: `access_key_id`
+ * rather than `aws_access_key_id` is the difference between a destination that
+ * works and an afternoon.
+ */
+export const BACKUP_BACKENDS = [
+	{
+		id: 's3',
+		label: 'S3 (Amazon, Backblaze, Wasabi, MinIO…)',
+		fields: ['provider', 'access_key_id', 'secret_access_key', 'region', 'endpoint'],
+	},
+	{
+		id: 'sftp',
+		label: 'SFTP',
+		fields: ['host', 'user', 'port', 'key_file', 'pass'],
+	},
+	{
+		id: 'ftp',
+		// Said plainly rather than hidden in documentation nobody opens: this one
+		// sends the password and the files in the clear.
+		label: 'FTP (unencrypted)',
+		fields: ['host', 'user', 'port', 'pass'],
+	},
+	{
+		id: 'webdav',
+		label: 'WebDAV',
+		fields: ['url', 'vendor', 'user', 'pass'],
+	},
+	// Signing in to these three takes a browser, which a box does not have: the box
+	// runs rclone authorize and the person pastes back the page it redirects to.
+	// `help` is the way without it, rclone on a computer, and is a language-file key.
+	{
+		id: 'onedrive',
+		label: 'OneDrive',
+		fields: ['token', 'drive_id', 'drive_type'],
+		// the box also asks Microsoft for drive_id and drive_type once signed in
+		signIn: true,
+		help: 'Or, on a computer that has a browser, add a OneDrive remote with rclone config, then run rclone config show with its name and copy its token, drive_id and drive_type here.',
+	},
+	{
+		id: 'drive',
+		label: 'Google Drive',
+		fields: ['token'],
+		// the box runs rclone authorize itself: see the sign-in under the backend
+		signIn: true,
+		help: 'Or, on a computer that has a browser, run rclone authorize "drive", sign in, and paste the token it prints.',
+	},
+	{
+		id: 'dropbox',
+		label: 'Dropbox',
+		fields: ['token'],
+		signIn: true,
+		help: 'Or, on a computer that has a browser, run rclone authorize "dropbox", sign in, and paste the token it prints.',
+	},
+]
+
+/**
+ * @param {string} id an rclone backend name
+ * @returns {boolean} whether the box can sign in to it for the person: it runs rclone
+ *   authorize itself, so only a browser is needed, not a computer with rclone
+ */
+export function canSignIn(id) {
+	const backend = BACKUP_BACKENDS.find(candidate => candidate.id === id)
+	return Boolean(backend && backend.signIn)
+}
+
+/**
+ * @param {string} id an rclone backend name
+ * @returns {string} how to fill that backend in, a language-file key, or '' when the
+ *   suggested fields say enough
+ */
+export function backendHelp(id) {
+	const backend = BACKUP_BACKENDS.find(candidate => candidate.id === id)
+	return (backend && backend.help) || ''
+}
+
+/**
+ * @param {string} id an rclone backend name
+ * @returns {{key: string, value: string}[]} one empty row per field that backend
+ *   usually wants, or a single blank row for one nobody here has heard of
+ */
+export function suggestedFields(id) {
+	const backend = BACKUP_BACKENDS.find(candidate => candidate.id === id)
+	if (!backend)
+		return [{ key: '', value: '' }]
+
+	return backend.fields.map(key => ({ key, value: '' }))
+}
+
+/**
+ * Drop the rows nobody filled in, so a suggestion the owner ignored is not sent as
+ * an empty option -- rclone treats an empty value as a value, and an empty
+ * `endpoint` is not the same as no endpoint.
+ *
+ * @param {{key: string, value: string}[]} rows
+ * @returns {object} what to send as `parameters`
+ */
+export function parametersFrom(rows) {
+	const parameters = {}
+
+	for (const row of rows || []) {
+		const key = (row.key || '').trim()
+		if (key === '' || (row.value || '') === '')
+			continue
+
+		parameters[key] = row.value
+	}
+
+	return parameters
+}

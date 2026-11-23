@@ -1,0 +1,66 @@
+name: Docker image
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the container
+        run: docker build --tag file-browser:test .
+      - name: Check sign-in and file access
+        shell: bash
+        run: |
+          password=$(openssl rand -hex 24)
+          docker run -d --name file-browser-test \
+            --publish 127.0.0.1:18080:8080 \
+            --env FILES_PASSWORD="$password" file-browser:test
+          trap 'docker logs file-browser-test; docker rm -f file-browser-test' EXIT
+          url=http://127.0.0.1:18080
+          curl -fsS --retry 15 --retry-all-errors --retry-delay 1 "$url/healthz"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$url/")" = 401
+          curl -fsS --user "files:$password" "$url/" -o /dev/null
+          curl -fsS --user "files:$password" --header 'Content-Type: application/json' \
+            --data '{"path":"/DATA/smoke"}' "$url/v1/folder"
+          curl -fsS --user "files:$password" "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
+
+  publish:
+    name: Publish to GitHub Container Registry
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: file-browser-publish
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Publish amd64 and arm64 images
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --use
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image:latest" --tag "$image:sha-${GITHUB_SHA::12}" .

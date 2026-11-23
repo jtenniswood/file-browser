@@ -1,0 +1,64 @@
+// Bulma and Buefy come first: @use may not follow any other rule, and the
+// three plain-CSS @import lines below are rules.
+//
+// bulma/sass/utilities/_all does not exist in Bulma 1, and common/variables is
+// already prepended to this file by style-resources-loader (loading a
+// `@forward ... with` file twice is fatal), so both are gone. `@use` rather
+// than `@import`: @import compiles fine against Bulma 1 and silently throws
+// every variable override away.
+@use "bulma/sass";
+@use "buefy/src/scss/buefy" with (
+	$toast-border-radius: 6px,
+	$toast-opacity: 1,
+	$toast-box-shadow: 0px 16px 32px -8px rgba(28, 31, 34, 0.12),
+	$snackbar-background-color: hsl(0, 0%, 100%),
+	$snackbar-color: hsla(208, 20%, 20%, 1),
+	$snackbar-border-radius: 6px,
+	$snackbar-button-text-transform: none,
+	$snackbar-box-shadow: 0px 16px 32px rgba(28, 31, 34, 0.12),
+	$sidebar-width: 22.5rem,
+	$loading-icon-size: 2.5rem,
+	$image-placeholder-blur-enabled: false,
+	$image-placeholder-blur: 0px
+);
+
+// Theme tokens (--casa-*), read by every partial and component below.
+@import "common/tokens";
+
+// Import materialdesignicons
+@import "~@mdi/font/css/materialdesignicons.min.css";
+
+// Import Swiper Style
+@import "~swiper/swiper-bundle.css";
+
+// Import CasaOS IconFont
+@import '~iconfonts-casaos/casaos-iconfonts.css';
+
+// Import CasaOS Styles
+// Commons
+@import "common/root";
+@import "common/font";
+@import "common/color";
+@import "common/spacing";
+@import "common/buttons";
+@import "common/title";
+@import "common/size";
+@import "common/images";
+@import "common/icon";
+@import "common/tabs";
+@import "common/card";
+@import "common/scrollbars";
+@import "common/animate";
+@import "common/avatar";
+@import "common/modal";
+@import "common/others";
+@import "common/widgets";
+@import "common/sections";
+@import "common/toast";
+@import "common/snackbar";
+// following the casa design specification
+@import "common/dropdown";
+
+// Pages and Components
+@import "components/filebrowser";
+

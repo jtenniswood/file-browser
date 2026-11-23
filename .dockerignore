@@ -1,0 +1,10 @@
+.git
+node_modules
+build
+dist
+.cache
+files-data
+.env
+.env.local
+.env.*.local
+*.log

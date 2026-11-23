@@ -1,0 +1,299 @@
+/************************************
+*
+* Modal
+*
+*************************************/
+
+
+.modal-card {
+    background: var(--casa-surface);
+    border-radius: $backDropBorderRadius;
+
+    // Tabs in a dialog: a baseline under the bar, the other tabs in the
+    // secondary text colour, the current one in the text colour over its
+    // accent underline. All in link blue, they read below AA on the dark card.
+    .b-tabs > .tabs:not(.is-toggle) {
+        // the colour only: _tabs.scss gives every tab bar its 1px border, and a
+        // bar that removes it (the service tabs of an app's settings) keeps its own
+        ul {
+            border-bottom-color: var(--casa-divider);
+        }
+
+        li a {
+            color: var(--casa-text-secondary);
+        }
+
+        li:not(.is-active) a:hover {
+            color: var(--casa-text);
+        }
+
+        li.is-active a {
+            color: var(--casa-text);
+        }
+    }
+
+    .close-container {
+        position: absolute;
+        right: 2rem;
+        top: 2rem;
+    }
+
+    .modal-close-container {
+        padding-left: 1rem;
+        margin-left: .5rem;
+        position: relative;
+        height: 100%;
+    }
+
+    .modal-close-container-line {
+        &:before {
+            content: '';
+            position: absolute;
+            border-left: var(--casa-text-emphasis) 2px solid;
+            height: 1rem;
+            left: 0;
+        }
+    }
+
+    .modal-card-head,
+    .modal-card-body,
+    .modal-card-foot {
+        position: relative;
+        background-color: transparent;
+        border: none;
+    }
+
+    .modal-card-head {
+        padding: 1.25rem 1.25rem .5rem 1.5rem;
+        border-bottom: 1px solid var(--casa-divider);
+    }
+
+    .modal-card-body {
+        padding: 1rem 1.5rem;
+
+        .loading-overlay .loading-icon:after {
+            -webkit-animation: spinAround 500ms infinite linear;
+            animation: spinAround 500ms infinite linear;
+            border: .2rem solid var(--casa-text-strong);
+            border-radius: 9999px;
+            border-right-color: transparent;
+            border-top-color: transparent;
+            content: '';
+            display: block;
+            position: absolute;
+            top: calc(50% - 1.25rem);
+            left: calc(50% - 1.25rem);
+            width: 2.5rem;
+            height: 2.5rem;
+
+        }
+
+        .button.is-static,
+        .input,
+        .textarea,
+        .select select,
+        .file-cta,
+        .file-name,
+        .pagination-previous,
+        .pagination-next,
+        .pagination-link,
+        .pagination-ellipsis {
+            font-size: .875rem;
+            height: 2.714em;
+            border: 1px solid var(--casa-border-strong) !important;
+            border-radius: 4px;
+
+            &:focus {
+                box-shadow: none;
+            }
+        }
+
+        .media {
+            padding: 0rem;
+        }
+
+        .media-content {
+            p {
+                word-wrap: break-word;
+
+                div {
+                    word-wrap: break-word;
+                }
+            }
+        }
+
+        .tab-content {
+            overflow: hidden;
+        }
+
+        .title {
+            overflow: hidden;
+        }
+
+        .field:last-child {
+            margin-bottom: .5rem;
+        }
+
+        .field-body {
+            .field:last-child {
+                margin-bottom: 0rem;
+            }
+        }
+
+        .port-item:not(:last-child) {
+            .field {
+                margin-bottom: 0;
+            }
+        }
+    }
+
+    // A section of a settings window: one thing (a destination, a schedule, a form)
+    // on a raised card, so a long window reads as a few blocks rather than a column of text.
+    .settings-card {
+        background: var(--casa-surface-card);
+        border: 1px solid var(--casa-divider-soft);
+        border-radius: 12px;
+        padding: .75rem 1rem;
+
+        &:not(:last-child) {
+            margin-bottom: .75rem;
+        }
+
+        h4,
+        .has-text-weight-semibold {
+            color: var(--casa-text-strong);
+        }
+    }
+
+    // the sentence under a tab or a title that says what the window is for
+    .settings-intro {
+        color: var(--casa-text-secondary);
+        font-size: .8125rem;
+        line-height: 1.45;
+    }
+
+    .modal-card-foot {
+        padding: .75rem 1.5rem 1.5rem 1.5rem;
+        border-top: 1px solid var(--casa-divider-soft);
+        // on a phone the buttons go to a second line rather than off the card
+        flex-wrap: wrap;
+        row-gap: .5rem;
+
+        // Bulma 1 no longer spaces a footer's buttons: side by side, they touched
+        > .button + .button {
+            margin-inline-start: .5rem;
+        }
+
+        .button {
+            border-radius: 9999px;
+            padding-left: calc(1em + .25em);
+            padding-right: calc(1em + .25em);
+        }
+    }
+}
+
+// Every window opened as a card is as wide as the Statistics and the VM windows
+// (owner's choice). Buefy caps the wrapper at 960px inline, hence !important.
+// :where() keeps both rules at the weight of one class, so a window that sets
+// its own size (Files, App Store, Logs, Fleet) still wins, and Buefy's
+// confirms (.dialog) and the power box (no card) keep theirs.
+// (Bulma registers the variable on .modal itself, so it is set there.)
+.modal {
+    --bulma-modal-content-width: 66rem;
+}
+
+:where(.modal:not(.dialog)) > .animation-content:where(:has(> .modal-card)) {
+    max-width: calc(100vw - 2rem) !important;
+}
+
+// the card is 66rem by Bulma's rule: in a window narrower than that it stays inside its wrapper
+:where(.modal:not(.dialog)) > .animation-content:where(:has(> .modal-card)) > .modal-card {
+    max-width: 100%;
+}
+
+.terminal-modal {
+    .close-container {
+        position: absolute;
+        right: 2rem;
+        top: 2rem;
+    }
+
+    .tab-content {
+        padding: 0;
+    }
+
+    // Tabs
+    .tabs {
+        &.is-toggle {
+            ul {
+                background: rgba(60, 60, 67, .05);
+                box-shadow: inset 0px 0px 4px rgba(0, 0, 0, .1);
+                border-radius: 6px;
+
+                li {
+                    flex: none;
+
+                    a {
+                        font-size: .875rem;
+                        padding: .2rem 1.5rem;
+                        min-width: 7rem;
+                        border-radius: 6px;
+                        border: none;
+
+                        &:hover {
+                            background-color: transparent;
+                        }
+                    }
+
+                    &.is-active {
+                        a {
+                            background: var(--casa-surface-raised);
+                            border: .5px solid rgba(0, 0, 0, .2);
+                            color: var(--casa-text-strong);
+                            z-index: 1;
+                            box-shadow: 0px .5px 1px rgba(0, 0, 0, .2);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+.modal-background {
+    background: rgba(0, 0, 0, .8);
+}
+
+/************************************
+*
+* Dialog
+*
+*************************************/
+
+.dialog {
+    .modal-card {
+        background-color: var(--casa-surface) !important;
+
+        .modal-card-head {
+            height: 3.5rem;
+            padding: 1.25rem 1.25rem .5rem 1.5rem;
+            border-bottom: 1px solid var(--casa-divider-soft);
+
+            .modal-card-title {
+                font-size: 1rem;
+            }
+        }
+
+        .modal-card-body {
+            border: none;
+        }
+
+        .media {
+            align-items: center;
+
+            .media-content {
+                font-size: .875rem;
+            }
+        }
+    }
+}

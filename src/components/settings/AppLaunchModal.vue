@@ -1,0 +1,173 @@
+<template>
+	<div class="modal-card app-launch-modal touch-targets">
+		<header class="modal-card-head">
+			<h3 class="title is-header">
+				{{ $t('App launching') }}
+			</h3>
+		</header>
+
+		<section class="modal-card-body">
+			<b-field>
+				<b-switch v-model="inIframe">
+					{{ $t('Open apps inside CasaOS') }}
+				</b-switch>
+			</b-field>
+
+			<p class="is-size-7 _has-text-gray mb-4">
+				{{ $t('When this is off, every app opens in a new browser tab.') }}
+			</p>
+
+			<template v-if="inIframe">
+				<p class="settings-intro mb-2">
+					{{ $t('Always open these apps in a new tab:') }}
+				</p>
+
+				<!-- the dashboard's own apps first: they are always there -->
+				<div v-for="app in builtins" :key="app.id" class="app-launch-modal__row">
+					<b-checkbox :model-value="isExcepted(app.id)" @update:model-value="toggleException(app.id)">
+						{{ app.title }}
+					</b-checkbox>
+				</div>
+
+				<b-message v-if="loadError" size="is-small" type="is-warning">
+					{{ loadError }}
+				</b-message>
+
+				<b-loading v-model="isLoading" :is-full-page="false" />
+
+				<div v-if="!isLoading && !loadError && apps.length === 0" class="is-size-7 _has-text-gray">
+					{{ $t('No other app is installed yet.') }}
+				</div>
+
+				<div v-for="app in apps" :key="app.id" class="app-launch-modal__row">
+					<b-checkbox :model-value="isExcepted(app.id)" @update:model-value="toggleException(app.id)">
+						{{ app.title }}
+					</b-checkbox>
+				</div>
+			</template>
+		</section>
+
+		<footer class="modal-card-foot is-flex is-justify-content-flex-end">
+			<b-button :label="$t('Cancel')" rounded @click="$emit('close')" />
+			<b-button :label="$t('Save')" rounded type="is-primary" @click="save" />
+		</footer>
+	</div>
+</template>
+
+<script>
+import { APP_STORE_LAUNCH_ID, FILES_LAUNCH_ID, FLEET_LAUNCH_ID, LOGS_LAUNCH_ID, STATS_LAUNCH_ID, VMS_LAUNCH_ID } from '@/mixins/app/appLaunchPreference'
+import { hasVirtualMachines } from '@/components/VirtualMachines/entry'
+import { hasFleet } from '@/components/Fleet/entry'
+import { hasLogs } from '@/components/Logs/entry'
+
+export default {
+	name: 'AppLaunchModal',
+	data() {
+		return {
+			inIframe: this.$store.state.appLaunchInIframe,
+			exceptions: [...(this.$store.state.appLaunchExceptions || [])],
+			apps: [],
+			hasVMs: false,
+			logsAvailable: false,
+			isMaster: false,
+			isLoading: true,
+			loadError: '',
+		}
+	},
+	computed: {
+		// the account's own: the dialog is also mounted without the store's getters (its specs), the owner's then
+		canWrite() {
+			return this.$store.getters.canWrite
+		},
+		// the cards this account has: the App Store and Files are the owner's, as the grid shows them
+		builtins() {
+			const builtins = [
+				...(this.canWrite ? [{ id: APP_STORE_LAUNCH_ID, title: this.$t('App Store') }, { id: FILES_LAUNCH_ID, title: this.$t('Files') }] : []),
+				{ id: STATS_LAUNCH_ID, title: this.$t('Statistics') },
+			]
+			if (this.logsAvailable) {
+				builtins.push({ id: LOGS_LAUNCH_ID, title: this.$t('Logs') })
+			}
+			if (this.hasVMs) {
+				builtins.push({ id: VMS_LAUNCH_ID, title: this.$t('Virtual Machines') })
+			}
+			if (this.isMaster) {
+				builtins.push({ id: FLEET_LAUNCH_ID, title: this.$t('Fleet') })
+			}
+			return builtins
+		},
+	},
+	async mounted() {
+		// only the modules the account reads are asked about; the Fleet card is the owner's (its page goes through the relay)
+		if (this.$store.getters.canReadModule('vm')) {
+			hasVirtualMachines().then((available) => {
+				this.hasVMs = available
+			})
+		}
+		if (this.canWrite) {
+			hasFleet().then((master) => {
+				this.isMaster = master
+			})
+		}
+		hasLogs().then((available) => {
+			this.logsAvailable = available
+		})
+
+		try {
+			const response = await this.$openAPI.appManagement.compose.myComposeAppList()
+			const list = (response && response.data && response.data.data) || {}
+
+			// The endpoint returns a map keyed by app id. Fall back to the key when
+			// an entry carries no readable title, so nothing shows up nameless.
+			this.apps = Object.keys(list)
+				.map(id => ({ id, title: this.titleOf(list[id]) || id }))
+				.sort((a, b) => a.title.localeCompare(b.title))
+		} catch {
+			// The setting itself still works without the list; only the per-app
+			// exceptions need it.
+			this.loadError = this.$t('The list of installed apps could not be loaded.')
+		} finally {
+			this.isLoading = false
+		}
+	},
+	methods: {
+		titleOf(entry) {
+			const title = entry && entry.store_info && entry.store_info.title
+			if (!title) {
+				return ''
+			}
+
+			return title[this.$i18n.locale] || title.en_us || Object.values(title)[0] || ''
+		},
+
+		isExcepted(id) {
+			return this.exceptions.includes(id)
+		},
+
+		toggleException(id) {
+			this.exceptions = this.isExcepted(id)
+				? this.exceptions.filter(entry => entry !== id)
+				: [...this.exceptions, id]
+		},
+
+		save() {
+			this.$store.commit('SET_APP_LAUNCH_IN_IFRAME', this.inIframe)
+			this.$store.commit('SET_APP_LAUNCH_EXCEPTIONS', this.exceptions)
+			this.$emit('close')
+		},
+	},
+}
+</script>
+
+<style lang="scss" scoped>
+.app-launch-modal {
+  &__row {
+    padding: 0.25rem 0;
+  }
+
+  .modal-card-body {
+    position: relative;
+    min-height: 8rem;
+  }
+}
+</style>

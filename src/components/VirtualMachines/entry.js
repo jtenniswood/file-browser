@@ -1,0 +1,112 @@
+// What the rest of the dashboard knows about virtual machines: whether the
+// module is there, the app card that stands for them next to Files, and how to
+// open the page. Everything else stays in this folder, loaded on demand.
+import { defineAsyncComponent } from 'vue'
+import { openWithEscape } from './modalStack'
+import { VMS_LAUNCH_ID, builtinOpensInNewTab } from '@/mixins/app/appLaunchPreference'
+import { openPage } from '@/router/pageTabs'
+
+// loaded when first opened: a box without the module never downloads the page
+const VmPage = defineAsyncComponent(() => import('./VmPage.vue'))
+const VmConsoleModal = defineAsyncComponent(() => import('./VmConsoleModal.vue'))
+
+let probe = null
+
+// The name of the card in the app grid, which also keeps its place in the
+// saved order.
+export const VM_APP_NAME = 'Virtual Machines'
+
+// The card itself, a system app like App Store and Files, shown only where the
+// module answers. Built when asked for, so that importing this file does not
+// load the icon.
+export function vmApplication() {
+	return {
+		id: 'virtual-machines',
+		name: VM_APP_NAME,
+		title: {
+			en_us: 'Virtual Machines',
+		},
+		icon: require('@/assets/img/app/vms.svg'),
+		status: 'running',
+		app_type: 'system',
+	}
+}
+
+// Whether the virtual machine module (CasaOS-VirtManagement) answers through
+// the gateway. Asked once, until a module is installed or removed (forgetVirtualMachines).
+export function hasVirtualMachines() {
+	if (!probe) {
+		// the HTTP client is loaded here, not at the top: the app grid imports this
+		// file, and should not pull in the client and the store with it
+		probe = import('@/service/service.js').then(({ api }) => api.get('/v2/virt_management/host')).then(() => true).catch((e) => {
+			// asked again next time unless the module is plainly not there
+			if (e.response?.status !== 404) {
+				probe = null
+			}
+			return false
+		})
+	}
+	return probe
+}
+
+// Forgets the answer, for when a module was installed or removed: the next
+// question goes to the gateway again.
+export function forgetVirtualMachines() {
+	probe = null
+}
+
+// Opens the page in a modal, or on a tab of its own when the App launching
+// setting sends apps, or this one, to a new tab. With a VM's id, on that VM.
+export function openVirtualMachines(buefy, state, vmId = '') {
+	if (builtinOpensInNewTab(VMS_LAUNCH_ID, state)) {
+		openPage('vms', { vm: vmId })
+		return null
+	}
+
+	return openWithEscape(buefy, {
+		component: VmPage,
+		hasModalCard: true,
+		trapFocus: true,
+		scroll: 'keep',
+		animation: 'zoom-in',
+		customClass: 'vm-modal',
+		props: { selectId: vmId },
+	})
+}
+
+// A VM's console, full screen, as the page opens it. Esc belongs to the VM: the
+// console closes from its own button only.
+export function openVmConsole(buefy, vm) {
+	return buefy.modal.open({
+		component: VmConsoleModal,
+		fullScreen: true,
+		canCancel: [],
+		customClass: 'vm-console-modal',
+		props: { vm },
+	})
+}
+
+// Every VM, by title, for the app grid's tiles. The client and the helpers are
+// loaded on the first call: only a grid that has the module makes one.
+export function listVirtualMachines() {
+	return Promise.all([import('./api'), import('./vms')]).then(([{ default: vmApi }, { applyOrder }]) =>
+		vmApi.list().then((res) => {
+			const vms = (res.data?.data || []).filter(vm => typeof vm?.id === 'string')
+			return applyOrder(vms, []).sorted
+		}))
+}
+
+// One VM as the service has it now, given up on after `ms`.
+export function getVirtualMachine(id, ms) {
+	return withTimeout(import('./api').then(({ default: vmApi }) => vmApi.get(id)).then(res => res.data?.data), ms)
+}
+
+// The promise, or a rejection once `ms` has gone by: a call that hangs must not
+// hold up what waits on it for ever. The timer goes with the answer.
+export function withTimeout(promise, ms) {
+	let timer
+	const late = new Promise((resolve, reject) => {
+		timer = setTimeout(() => reject(new Error(`No answer in time (${ms} ms)`)), ms)
+	})
+	return Promise.race([promise, late]).finally(() => clearTimeout(timer))
+}

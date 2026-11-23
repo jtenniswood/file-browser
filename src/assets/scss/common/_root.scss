@@ -1,0 +1,94 @@
+// Root Style
+
+// Bulma 1 gives a bare <a> its own lightness (--bulma-link-on-scheme-l, 39%)
+// rather than the link colour itself, which darkened every link in the
+// dashboard to #0a52bd. Hold the palette's own blue. It has to name the theme
+// selectors too: Bulma sets this again under [data-theme=light], which beats a
+// bare :root.
+:root,
+.theme-light,
+[data-theme="light"] {
+	--bulma-link-on-scheme-l: var(--bulma-link-l);
+}
+
+:root {
+    --swiper-navigation-size: 24px !important;
+}
+
+// Native scrollbars, selects, date inputs and form-control defaults follow the
+// chosen theme; nothing else in the tree declares color-scheme.
+html[data-theme='dark'] {
+    color-scheme: dark;
+
+    // The pin above also matches <html data-theme="dark"> through :root and
+    // would hold links at 54% there (4.2:1 on #171717). Bulma 1.0.4's own dark
+    // value for this property is 64% (5.9:1); give it back.
+    --bulma-link-on-scheme-l: 64%;
+
+    // Bulma paints its shadows white in dark (.card, .box, .dropdown-content,
+    // .modal-card-head, .b-tooltip); every shadow in the dashboard is black
+    // in both themes, so hold the light lightness.
+    --bulma-shadow-l: 4%;
+
+    // Buefy compiles b-loading's veil to a literal white; over dark chrome it
+    // is the surface (--casa-surface) at the same alpha. The app card exempts
+    // itself in _card.scss.
+    .loading-overlay {
+        --bulma-loading-background: rgba(31, 32, 35, 0.5);
+    }
+
+    // Bulma's shade helpers are literals with !important and never follow the
+    // theme. has-text-black sits on chrome twice (AppPanel), nowhere on glass.
+    .has-text-black {
+        color: var(--casa-text-strong) !important;
+    }
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+body,
+html {
+    overflow: hidden;
+    font-family: $family-sans-serif;
+}
+
+
+.button,
+.input,
+.textarea,
+.taginput .taginput-container.is-focusable,
+.select select,
+.file-cta,
+.file-name,
+.pagination-previous,
+.pagination-next,
+.pagination-link,
+.pagination-ellipsis {
+    &:focus {
+        box-shadow: none;
+    }
+}
+
+@media screen and (max-width: 1024px) {
+    .container {
+        margin: 0 1rem;
+        // Bulma's width: 100% plus these margins ran 1rem past the screen's right edge, which cut it off
+        width: auto;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .b-group {
+        align-items: initial !important;
+        display: block !important;
+        width: 5rem;
+        margin-left: 0.5rem;
+
+        .ml-2 {
+            margin-left: 0 !important;
+            margin-top: 0.5rem !important;
+        }
+    }
+}

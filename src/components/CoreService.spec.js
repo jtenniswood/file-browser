@@ -1,0 +1,644 @@
+// @vitest-environment happy-dom
+import Buefy from 'buefy'
+import { flushPromises } from '@vue/test-utils'
+import { createApp } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import CoreService from '@/components/CoreService.vue'
+import TelemetryPreviewModal from '@/components/settings/TelemetryPreviewModal.vue'
+import events from '@/events/events'
+import * as entry from '@/components/Stats/entry'
+import { HOSTILE } from '@/components/Stats/__fixtures__/contract'
+import { alertBadge } from '@/components/Stats/alertBadge'
+import { createAlertFeed } from '@/components/Stats/resourceAlerts'
+import { renderSize } from '@/mixins/file_utils'
+
+vi.mock('@/components/Stats/alertBadge', () => ({ alertBadge: { load: vi.fn(), refreshSoon: vi.fn(), stop: vi.fn() } }))
+
+// An update emits app:update-begin, then app:install-progress while the images
+// pull, then app:update-end. All three name the app the same way, in `app:name`.
+// The two update handlers read `name` and `cid` instead, which no event carries,
+// so an update drew a second nameless card under the key `undefined` and left the
+// real one on screen at whatever percentage it had reached.
+
+function service() {
+	const vm = {
+		noticesData: {},
+		$t: (key, params) => (params ? key.replace(/\{(\w+)\}/g, (_, k) => params[k]) : key),
+		$EventBus: { $emit: vi.fn() },
+		$buefy: { toast: { open: vi.fn() } },
+		addIdToSessionStorage: vi.fn(),
+		renderSize,
+	}
+	for (const name of ['addNotice', 'removeNotice', 'appTitle', 'backupTitle', 'backupCardName', 'backupCardTitle', 'installStepText', 'transformAppInstallationProgress'])
+		vm[name] = CoreService.methods[name].bind(vm)
+
+	const fire = (event, properties) => CoreService.sockets[event].call(vm, { Properties: properties })
+
+	return { vm, fire }
+}
+
+const sonarr = {
+	'app:name': 'sonarr',
+	'app:title': '{"en_us":"Sonarr"}',
+	'app:icon': 'sonarr.png',
+}
+
+describe('backing up', () => {
+	// the card came up as "Installing Backing up casaos-system"
+	it('titles the backup of the box as the box, not as an install', () => {
+		const { vm, fire } = service()
+
+		fire('backup:begin', { 'app:name': 'casaos-system', 'backup:kind': 'backup' })
+		fire('backup:progress', { 'app:name': 'casaos-system', 'backup:kind': 'backup', 'app:progress': '40' })
+
+		const card = vm.noticesData['backup:casaos-system']
+		expect(card.prelude.title).toBe('Backing up this box')
+		expect(card.content).toEqual({ text: '40% done', value: 40 })
+	})
+})
+
+describe('updating an app', () => {
+	it('draws one card, under the app it is updating', () => {
+		const { vm, fire } = service()
+
+		fire('app:update-begin', sonarr)
+		fire('app:install-progress', { ...sonarr, 'app:progress': '88' })
+
+		expect(Object.keys(vm.noticesData)).toEqual(['sonarr'])
+		expect(vm.noticesData.sonarr.prelude.title).toBe('Installing Sonarr')
+		expect(vm.noticesData.sonarr.content).toEqual({ text: 'Installing 88%', value: 88 })
+	})
+
+	it('takes the card away when the update ends', () => {
+		const { vm, fire } = service()
+
+		fire('app:update-begin', sonarr)
+		fire('app:install-progress', { ...sonarr, 'app:progress': '88' })
+		fire('app:update-end', { ...sonarr, 'app:updated': 'true' })
+
+		expect(vm.noticesData).toEqual({})
+		expect(vm.addIdToSessionStorage).toHaveBeenCalledWith('sonarr')
+	})
+
+	// A pull that succeeded and then failed to start is not an app that was updated,
+	// and badging it as new sends somebody to look at a version that is not there.
+	it('badges the app only when the app itself was replaced', () => {
+		const { vm, fire } = service()
+
+		fire('app:update-begin', sonarr)
+		fire('app:update-end', { ...sonarr, 'docker:image:updated': 'true' })
+
+		expect(vm.addIdToSessionStorage).not.toHaveBeenCalled()
+	})
+
+	// Left alone, a failed update's card sits at the percentage it died on until
+	// the page is reloaded, saying nothing.
+	it('replaces the card with the reason when it fails', () => {
+		const { vm, fire } = service()
+
+		fire('app:update-begin', sonarr)
+		fire('app:update-error', { ...sonarr, message: 'no space left on device' })
+
+		expect(vm.noticesData.sonarr).toBeUndefined()
+		expect(vm.noticesData.sonarrerror.content.text).toBe('no space left on device')
+		expect(vm.$buefy.toast.open).toHaveBeenCalled()
+	})
+})
+
+// The card said "Installing 75%" and nothing else: 75% of what, of which image, and
+// "Installation completed" at the end of the download, with the containers still to be
+// created and started -- the part that can take minutes.
+describe('installing an app', () => {
+	const llm = { 'app:name': 'anythingllm', 'app:title': '{"en_us":"AnythingLLM"}' }
+	const pulling = {
+		...llm,
+		'app:progress': '25',
+		'app:install:step': 'pull',
+		'docker:image:name': 'mintplexlabs/anythingllm:latest',
+		'docker:image:index': '1',
+		'docker:image:count': '2',
+		'docker:image:downloaded': '327155712',
+		'docker:image:size': '1503238553',
+	}
+
+	it('says which image is downloading, which of how many, and how much of it is here', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', pulling)
+
+		expect(vm.noticesData.anythingllm.content).toMatchObject({
+			text: 'Downloading · 312 MB of 1.4 GB · image 1 of 2',
+			value: 25,
+			detail: 'mintplexlabs/anythingllm:latest',
+		})
+	})
+
+	// a layer says its size only when its download starts: until all have, there is no total
+	it('gives the bytes alone while the size of the image is not known', () => {
+		const { vm, fire } = service()
+		const { 'docker:image:size': _, ...sizeless } = pulling
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', { ...sizeless, 'docker:image:count': '1' })
+
+		expect(vm.noticesData.anythingllm.content.text).toBe('Downloading · 312 MB')
+	})
+
+	it('says so when the image is being unpacked', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', { ...pulling, 'app:install:step': 'extract', 'docker:image:count': '1' })
+
+		expect(vm.noticesData.anythingllm.content.text).toBe('Unpacking the image')
+	})
+
+	// nobody knows how long these take, so the bar stops pretending: no value is a bar
+	// that moves without a figure
+	it.each([
+		['create', 'Creating the containers'],
+		['start', 'Starting, waiting for the app to answer'],
+	])('names the %s step, on a bar with no figure', (step, text) => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', { ...llm, 'app:progress': '100', 'app:install:step': step })
+
+		expect(vm.noticesData.anythingllm.content).toMatchObject({ text, value: undefined, detail: '' })
+	})
+
+	// events are published without waiting for one another, so the last frame of the
+	// download can land after the step that follows it
+	it('does not go back to the download once the containers are being created', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', { ...llm, 'app:progress': '100', 'app:install:step': 'create' })
+		fire('app:install-progress', pulling)
+
+		expect(vm.noticesData.anythingllm.content.text).toBe('Creating the containers')
+	})
+
+	// A restore that installs the app goes through the same steps with no install around
+	// them, so nothing would ever take the card away; and a step that lands after the end
+	// of its install would open it again for good.
+	it('does not open a card for a step alone', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-progress', { ...llm, 'app:progress': '100', 'app:install:step': 'start' })
+
+		expect(vm.noticesData).toEqual({})
+	})
+
+	// a save that failed leaves its card up, and the next one begins on it: the download
+	// of that one is not a late frame of the last
+	it('starts over when something begins on a card left at a later step', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', { ...llm, 'app:progress': '100', 'app:install:step': 'start' })
+		fire('app:update-begin', llm)
+		expect(vm.noticesData.anythingllm.content).toEqual({ text: 'Starting update', value: 0 })
+
+		fire('app:install-progress', pulling)
+		expect(vm.noticesData.anythingllm.content.step).toBe('pull')
+	})
+
+	// the page loaded half way through: the card wrote the bare number, "25"
+	it('says what is going on from the first frame it sees', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-progress', pulling)
+
+		expect(vm.noticesData.anythingllm.content.text).toBe('Downloading · 312 MB of 1.4 GB · image 1 of 2')
+	})
+
+	// what the app service sent before it named its steps
+	it('keeps the percentage alone when the step is not said', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', llm)
+		fire('app:install-progress', { ...llm, 'app:progress': '75' })
+
+		expect(vm.noticesData.anythingllm.content).toMatchObject({ text: 'Installing 75%', value: 75 })
+	})
+
+	// it went out as written, in English, whatever the language
+	it('words the first line in the language of the dashboard', () => {
+		const { vm, fire } = service()
+		vm.$t = key => `[${key}]`
+
+		fire('app:install-begin', llm)
+
+		expect(vm.noticesData.anythingllm.content.text).toBe('[Starting installation]')
+	})
+})
+
+// The title comes from the app's store entry, and an app whose compose file has no
+// x-casaos has none. Parsing it unguarded threw inside the socket handler, so the
+// card never appeared at all.
+describe('an app the catalogue knows nothing about', () => {
+	it('is named by its own name rather than throwing', () => {
+		const { vm, fire } = service()
+
+		fire('app:update-begin', { 'app:name': 'gluetun-stack' })
+
+		expect(vm.noticesData['gluetun-stack'].prelude.title).toBe('Installing gluetun-stack')
+	})
+
+	it('is named that way on install too', () => {
+		const { vm, fire } = service()
+
+		fire('app:install-begin', { 'app:name': 'gluetun-stack' })
+
+		expect(vm.noticesData['gluetun-stack'].prelude.title).toBe('Installing gluetun-stack')
+	})
+})
+
+// Statistics are on by default, and this notice is how the owner of a box learns
+// it: once, after login, with the two ways out right in it.
+describe('the anonymous statistics notice', () => {
+	function box(state) {
+		let params
+		const vm = {
+			$t: key => key,
+			$api: {
+				sys: {
+					getTelemetry: vi.fn(() => Promise.resolve({ data: { success: 200, data: state } })),
+					// The core answers the state after the change.
+					setTelemetry: vi.fn(change => Promise.resolve({ data: { success: 200, data: { enabled: true, ...change } } })),
+				},
+			},
+			$EventBus: { $emit: vi.fn() },
+			$buefy: {
+				toast: { open: vi.fn() },
+				modal: { open: vi.fn() },
+				// Buefy calls onClose whenever the notice closes: its cross, or close().
+				notification: {
+					open: vi.fn((p) => {
+						params = p
+						return { close: () => p.onClose() }
+					}),
+				},
+			},
+		}
+		vm.showTelemetryPreview = CoreService.methods.showTelemetryPreview.bind(vm)
+		const announce = CoreService.methods.announceTelemetry.bind(vm)
+		// The message is [sentence, row of buttons]; a button is found by its words.
+		const click = label => params.message[1].children.find(b => b.children === label).props.onClick()
+		const close = () => params.onClose()
+
+		return { vm, announce, click, close }
+	}
+
+	it('is asked for when the dashboard opens', () => {
+		const vm = { announceBackupFailures: vi.fn(), announceTelemetry: vi.fn(), announceAutoUpdate: vi.fn() }
+
+		CoreService.mounted.call(vm)
+
+		expect(vm.announceTelemetry).toHaveBeenCalledTimes(1)
+	})
+
+	it('is shown when statistics are on and it was never seen', async () => {
+		const { vm, announce } = box({ enabled: true, notice_seen: false })
+
+		await announce()
+
+		expect(vm.$buefy.notification.open).toHaveBeenCalledTimes(1)
+		const [sentence] = vm.$buefy.notification.open.mock.calls[0][0].message
+		expect(sentence.children).toBe('ReCasaOS sends anonymous statistics (versions, hardware, country).')
+	})
+
+	it.each([
+		['statistics are off', { enabled: false, notice_seen: false }],
+		['it was seen', { enabled: true, notice_seen: true }],
+	])('is not shown when %s', async (_, state) => {
+		const { vm, announce } = box(state)
+
+		await announce()
+
+		expect(vm.$buefy.notification.open).not.toHaveBeenCalled()
+	})
+
+	it('is not shown when the core cannot be asked', async () => {
+		const { vm, announce } = box()
+		vm.$api.sys.getTelemetry.mockRejectedValue(new Error('offline'))
+
+		await announce()
+
+		expect(vm.$buefy.notification.open).not.toHaveBeenCalled()
+	})
+
+	it('closed, is marked seen and changes nothing else', async () => {
+		const { vm, announce, close } = box({ enabled: true, notice_seen: false })
+
+		await announce()
+		close()
+
+		expect(vm.$api.sys.setTelemetry).toHaveBeenCalledTimes(1)
+		expect(vm.$api.sys.setTelemetry).toHaveBeenCalledWith({ notice_seen: true })
+	})
+
+	it('opens the preview from See what is sent, and is marked seen', async () => {
+		const { vm, announce, click } = box({ enabled: true, notice_seen: false })
+
+		await announce()
+		click('See what is sent')
+
+		expect(vm.$buefy.modal.open).toHaveBeenCalledWith(expect.objectContaining({ component: TelemetryPreviewModal }))
+		expect(vm.$api.sys.setTelemetry).toHaveBeenCalledTimes(1)
+		expect(vm.$api.sys.setTelemetry).toHaveBeenCalledWith({ notice_seen: true })
+	})
+
+	it('turns statistics off from Turn off, in the request that marks it seen, and moves the Settings switch', async () => {
+		const { vm, announce, click } = box({ enabled: true, notice_seen: false })
+
+		await announce()
+		click('Turn off')
+		await flushPromises()
+
+		expect(vm.$api.sys.setTelemetry).toHaveBeenCalledTimes(1)
+		expect(vm.$api.sys.setTelemetry).toHaveBeenCalledWith({ notice_seen: true, enabled: false })
+		expect(vm.$EventBus.$emit).toHaveBeenCalledWith(events.TELEMETRY_CHANGED, false)
+	})
+
+	// A box whose disk went read-only answers 500: statistics stay on, and the
+	// owner who pressed Turn off has to hear it.
+	it('says so when Turn off does not reach the core, and moves nothing', async () => {
+		const { vm, announce, click } = box({ enabled: true, notice_seen: false })
+		vm.$api.sys.setTelemetry.mockRejectedValue(new Error('500'))
+
+		await announce()
+		click('Turn off')
+		await flushPromises()
+
+		expect(vm.$buefy.toast.open).toHaveBeenCalledTimes(1)
+		expect(vm.$buefy.toast.open).toHaveBeenCalledWith(expect.objectContaining({ message: 'The setting could not be saved.', type: 'is-danger' }))
+		expect(vm.$EventBus.$emit).not.toHaveBeenCalled()
+	})
+
+	it('goes away unseen when the dashboard unmounts: it comes back next time', async () => {
+		const { vm, announce } = box({ enabled: true, notice_seen: false })
+		vm.destroyUIEventBus = vi.fn()
+
+		await announce()
+		const notice = vm.$buefy.notification.open.mock.results[0].value
+		const close = vi.spyOn(notice, 'close')
+		CoreService.beforeUnmount.call(vm)
+		await flushPromises()
+
+		expect(close).toHaveBeenCalledTimes(1)
+		expect(vm.$api.sys.setTelemetry).not.toHaveBeenCalled()
+	})
+
+	it('stays quiet when only marking it seen fails: it comes back next time', async () => {
+		const { vm, announce, close } = box({ enabled: true, notice_seen: false })
+		vm.$api.sys.setTelemetry.mockRejectedValue(new Error('500'))
+
+		await announce()
+		close()
+		await flushPromises()
+
+		expect(vm.$buefy.toast.open).not.toHaveBeenCalled()
+		expect(vm.$EventBus.$emit).not.toHaveBeenCalled()
+	})
+})
+
+// An update the box installed by itself happened while nobody watched. The owner
+// is told once per browser, where the dashboard opens, with the release notes.
+describe('the automatic update notice', () => {
+	beforeEach(() => {
+		localStorage.clear()
+		// the morning after the updates below, which started at 03:12
+		vi.useFakeTimers({ toFake: ['Date'] })
+		vi.setSystemTime(new Date('2026-09-24T09:00:00+02:00'))
+	})
+	afterEach(() => vi.useRealTimers())
+
+	function box(last) {
+		const vm = {
+			$t: (key, params) => (params ? key.replace(/\{(\w+)\}/g, (_, k) => params[k]) : key),
+			$api: {
+				sys: {
+					getAutoUpdate: vi.fn(() => Promise.resolve({
+						data: { success: 200, data: { enabled: true, window: { start: '03:00', end: '05:00' }, state: 'up_to_date', next: null, last } },
+					})),
+				},
+			},
+			$buefy: { notification: { open: vi.fn() } },
+		}
+		const announce = CoreService.methods.announceAutoUpdate.bind(vm)
+		const shown = () => vm.$buefy.notification.open.mock.calls.map(([p]) => p.message)
+
+		return { vm, announce, shown }
+	}
+	const succeeded = version => ({ version, started_at: '2026-09-24T03:12:00+02:00', result: 'succeeded' })
+
+	it('is asked for when the dashboard opens', () => {
+		const vm = { announceBackupFailures: vi.fn(), announceTelemetry: vi.fn(), announceAutoUpdate: vi.fn() }
+
+		CoreService.mounted.call(vm)
+
+		expect(vm.announceAutoUpdate).toHaveBeenCalledTimes(1)
+	})
+
+	it('says the version it updated to, with the release notes', async () => {
+		const { announce, shown } = box(succeeded('v0.5.8'))
+
+		await announce()
+
+		expect(shown()).toHaveLength(1)
+		const [sentence, link] = shown()[0]
+		expect(sentence.children).toBe('ReCasaOS updated itself to v0.5.8 last night')
+		expect(link.children).toBe('Release notes')
+		expect(link.props.href).toBe('https://github.com/ReCasaOS/CasaOS-Install/releases/tag/v0.5.8')
+		expect(link.props.target).toBe('_blank')
+	})
+
+	it('is said once per browser for a version, and again for the next one', async () => {
+		await box(succeeded('v0.5.8')).announce()
+
+		const again = box(succeeded('v0.5.8'))
+		await again.announce()
+		expect(again.shown()).toHaveLength(0)
+
+		const next = box(succeeded('v0.5.9'))
+		await next.announce()
+		expect(next.shown()).toHaveLength(1)
+	})
+
+	it.each([
+		['nothing was ever attempted', null],
+		['the update is still running', { version: 'v0.5.8', started_at: '2026-09-24T03:12:00+02:00', result: 'running' }],
+		['the update failed', { version: 'v0.5.8', started_at: '2026-09-24T03:12:00+02:00', result: 'failed' }],
+	])('is not said when %s', async (_, last) => {
+		const { announce, shown } = box(last)
+
+		await announce()
+
+		expect(shown()).toHaveLength(0)
+	})
+
+	it('is not said days later as if it were last night, and not later either', async () => {
+		const old = box({ version: 'v0.5.8', started_at: '2026-09-20T03:12:00+02:00', result: 'succeeded' })
+		await old.announce()
+		expect(old.shown()).toHaveLength(0)
+		expect(localStorage.getItem('casaos-autoupdate-announced')).toBe('v0.5.8')
+	})
+
+	it('is not said by a core older than the feature', async () => {
+		const { vm, announce, shown } = box()
+		vm.$api.sys.getAutoUpdate.mockRejectedValue(new Error('404'))
+
+		await announce()
+
+		expect(shown()).toHaveLength(0)
+	})
+})
+
+// A resource alert is a pop-up at the top right: the sentence, and a button that opens Statistics on the item.
+// Every word of it comes from a service, so it is text, drawn from VNodes and never from a string Buefy would read as HTML.
+describe('resource alert notifications', () => {
+	const props = (over = {}) => ({ item: 'app:immich', name: 'Immich / server', kind: 'app-container', situation: 'cpu_high', value: '93', since: '2026-10-20T10:00:00Z', source: 'app_management', ...over })
+
+	function box(open = vi.fn()) {
+		const vm = {
+			$t: (key, params) => (params ? key.replace(/\{(\w+)\}/g, (_, k) => params[k]) : key),
+			$buefy: { notification: { open } },
+			$store: { state: { marker: 1 } },
+		}
+		vm.alertFeed = createAlertFeed()
+		vm.showResourceAlert = CoreService.methods.showResourceAlert.bind(vm)
+		const fire = (event, properties) => CoreService.sockets[event].call(vm, { Properties: properties })
+		return { vm, fire }
+	}
+
+	it('opens one notification with an array message: the sentence, then the button', () => {
+		const { vm, fire } = box()
+
+		fire('resource:alert-firing', props())
+
+		expect(vm.$buefy.notification.open).toHaveBeenCalledTimes(1)
+		const options = vm.$buefy.notification.open.mock.calls[0][0]
+		expect(Array.isArray(options.message)).toBe(true)
+		expect(typeof options.message[0].children).toBe('string')
+		expect(options.message[0].children).toMatch(/^Processor of Immich \/ server at 93 % since /)
+		expect(options).toMatchObject({ position: 'is-top-right', type: 'is-warning', duration: 15000, queue: false, hasIcon: false, ariaCloseLabel: 'Close' })
+		expect(options.message[1].children).toBe('Open statistics')
+	})
+
+	it('a resolved one is a success, after a firing', () => {
+		const { vm, fire } = box()
+
+		fire('resource:alert-resolved', props({ value: undefined }))
+		expect(vm.$buefy.notification.open).not.toHaveBeenCalled()
+		fire('resource:alert-firing', props())
+		fire('resource:alert-resolved', props({ value: undefined }))
+
+		const options = vm.$buefy.notification.open.mock.calls[1][0]
+		expect(options.type).toBe('is-success')
+		expect(options.message[0].children).toBe('Processor of Immich / server is back to normal')
+	})
+
+	it('the button opens Statistics on the item', () => {
+		const { vm, fire } = box()
+		const open = vi.spyOn(entry, 'openStatistics').mockReturnValue(null)
+
+		fire('resource:alert-firing', props())
+		vm.$buefy.notification.open.mock.calls[0][0].message[1].props.onClick()
+
+		expect(open).toHaveBeenCalledWith(vm.$buefy, vm.$store.state, { item: 'app:immich' })
+		open.mockRestore()
+	})
+
+	it.each([
+		['an unknown situation', { situation: 'x' }],
+		['no properties', undefined],
+	])('%s opens nothing and does not throw', (_, over) => {
+		const { vm, fire } = box()
+
+		expect(() => fire('resource:alert-firing', over === undefined ? undefined : props(over))).not.toThrow()
+
+		expect(vm.$buefy.notification.open).not.toHaveBeenCalled()
+	})
+
+	it('a hostile name leaves no element in the document, with the real Buefy', async () => {
+		const app = createApp({ render: () => null })
+		app.use(Buefy)
+		const { fire } = box(p => app.config.globalProperties.$buefy.notification.open(p))
+		window.pwned = 0
+
+		fire('resource:alert-firing', props({ name: HOSTILE }))
+		await flushPromises()
+
+		expect(document.querySelectorAll('.notices img, .notification img')).toHaveLength(0)
+		expect(document.querySelector('.notification')).not.toBeNull()
+		expect(document.querySelector('.notification').textContent).toContain('<img')
+		expect(window.pwned).toBe(0)
+	})
+})
+
+describe('the count badge of the Statistics icon', () => {
+	beforeEach(() => vi.clearAllMocks())
+
+	it('is read when the dashboard opens and stopped when it closes', () => {
+		const vm = { announceBackupFailures: vi.fn(), announceTelemetry: vi.fn(), announceAutoUpdate: vi.fn(), destroyUIEventBus: vi.fn() }
+
+		CoreService.mounted.call(vm)
+		expect(alertBadge.load).toHaveBeenCalledTimes(1)
+
+		CoreService.beforeUnmount.call(vm)
+		expect(alertBadge.stop).toHaveBeenCalledTimes(1)
+	})
+
+	it.each(['resource:alert-firing', 'resource:alert-resolved'])('is refreshed by %s once, even when the feed drops the event as a flood', (event) => {
+		const vm = {
+			$t: key => key,
+			$buefy: { notification: { open: vi.fn() } },
+			$store: { state: {} },
+		}
+		vm.alertFeed = createAlertFeed()
+		vm.showResourceAlert = CoreService.methods.showResourceAlert.bind(vm)
+		const props = n => ({ item: `c${n}`, name: 'x', kind: 'container', situation: 'cpu_high', value: '95' })
+
+		for (let n = 1; n <= 7; n++) {
+			CoreService.sockets[event].call(vm, { Properties: props(n) })
+		}
+		// the feed let at most five firings in; resolved with no firing shows nothing at all
+		expect(vm.$buefy.notification.open.mock.calls.length).toBe(event === 'resource:alert-firing' ? 5 : 0)
+		expect(alertBadge.refreshSoon).toHaveBeenCalledTimes(7)
+	})
+
+	it('is refreshed for an event that is junk', () => {
+		const vm = { $t: key => key, $buefy: { notification: { open: vi.fn() } } }
+		vm.alertFeed = createAlertFeed()
+		vm.showResourceAlert = CoreService.methods.showResourceAlert.bind(vm)
+
+		CoreService.sockets['resource:alert-firing'].call(vm, undefined)
+
+		expect(alertBadge.refreshSoon).toHaveBeenCalledTimes(1)
+		expect(vm.$buefy.notification.open).not.toHaveBeenCalled()
+	})
+})
+
+describe('the count badge after a reconnection', () => {
+	beforeEach(() => vi.clearAllMocks())
+
+	it('is read again when the socket reconnects', () => {
+		CoreService.sockets.reconnect.call({})
+		expect(alertBadge.load).toHaveBeenCalledTimes(1)
+	})
+
+	it('does not listen to connect, which also fires for the first connection', () => {
+		expect(CoreService.sockets.connect).toBeUndefined()
+	})
+})
+
+describe('the alert feed', () => {
+	it('is declared when the component is created, not on the first event', () => {
+		const vm = { getMessageFromLetter: vi.fn(), initUIEventBus: vi.fn() }
+		CoreService.created.call(vm)
+		expect(typeof vm.alertFeed.accept).toBe('function')
+	})
+})

@@ -1,0 +1,111 @@
+<!--
+ * @Author: Jerryk jerry@icewhale.org
+ * @Date: 2022-06-21 19:03:39
+ * @LastEditors: Jerryk jerry@icewhale.org
+ * @LastEditTime: 2022-08-18 10:48:59
+ * @FilePath: \CasaOS-UI-dev\src\components\wallpaper\CasaWallpaper.vue
+ * @Description:
+ *
+ * Copyright (c) 2022 by IceWhale, All Rights Reserved.
+-->
+<template>
+	<div>
+		<div id="background" v-animate-css="animate" :style="backgroundStyleObj"></div>
+		<context-menu></context-menu>
+	</div>
+</template>
+
+<script>
+import { defineAsyncComponent } from 'vue'
+import ContextMenu from './ContextMenu.vue'
+import { findLoginWallpaper } from './loginWallpaper'
+import events from '@/events/events'
+
+export default {
+	name: 'casa-background',
+	components: {
+		ContextMenu,
+	},
+	props: {
+		animate: {
+			type: Object,
+			default: null,
+		},
+	},
+	data() {
+		return {
+			isWelcome: false,
+			backgroundStyleObj: {
+				backgroundImage: localStorage.getItem('wallpaper') ? `url(${this.parseUrl(localStorage.getItem('wallpaper'))})` : `url(${this.$store.state.wallpaperObject.path})`,
+			},
+		}
+	},
+	watch: {
+		'$store.state.wallpaperObject': {
+			handler(val) {
+				if (this.$route?.path !== '/login') {
+					this.backgroundStyleObj.backgroundImage = `url(${this.parseUrl(val.path)})`
+				}
+			},
+			deep: true,
+		},
+		// the login screen has a wallpaper of its own when one was set; the
+		// dashboard's comes back once signed in
+		'$route.path': {
+			handler(path) {
+				if (path === '/login') {
+					findLoginWallpaper().then((url) => {
+						if (url && this.$route.path === '/login') {
+							this.backgroundStyleObj.backgroundImage = `url(${url})`
+						}
+					})
+				} else {
+					const saved = localStorage.getItem('wallpaper')
+					this.backgroundStyleObj.backgroundImage = `url(${this.parseUrl(saved || this.$store.state.wallpaperObject.path)})`
+				}
+			},
+			immediate: true,
+		},
+
+	},
+	mounted() {
+		this.$EventBus.$on(events.SHOW_CHANGE_WALLPAPER_MODAL, () => {
+			this.showChangeWallpaperModal()
+		})
+	},
+	methods: {
+		showChangeWallpaperModal() {
+			this.$buefy.modal.open({
+				component: defineAsyncComponent(() => import('@/components/wallpaper/WallpaperModal.vue')),
+				hasModalCard: true,
+				customClass: '',
+				trapFocus: true,
+				canCancel: ['escape'],
+				scroll: 'keep',
+				animation: 'zoom-in',
+				events: {},
+			})
+		},
+		parseUrl(serverUrl) {
+			// serverUrl.replace('/ui', '');
+			let newUrl = serverUrl.replace('SERVER_URL', `${this.$protocol}//${this.$baseURL}`)
+			newUrl = newUrl.replace('/ui', '').replace('/user/', '/users/')
+			return newUrl
+		},
+	},
+}
+</script>
+
+<style lang="scss">
+#background {
+	position: fixed;
+	z-index: 0;
+	width: 100%;
+	height: 100%;
+	background-size: cover;
+	background-repeat: no-repeat;
+	background-position: center center;
+	overflow: hidden;
+	transition: background-image 0.3s ease;
+}
+</style>

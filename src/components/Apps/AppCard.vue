@@ -1,0 +1,1733 @@
+<template>
+	<div :class="{ 'is-compact': compact }" :role="compact ? 'button' : undefined" :tabindex="compact ? 0 : undefined" class="common-card is-flex is-align-items-center is-justify-content-center  app-card"
+		@click="compact && openFromCard($event)" @keydown.enter.self="compact && openFromCard($event)" @mouseleave="hover = true" @mouseover="onOver">
+		<!-- compact (beta dashboard): the whole card opens the app, not only its icon -->
+		<span v-if="compact && item.update_available && !repoBadge" class="update-chip">{{ $t('Available update') }}</span>
+		<!-- Action Button Start -->
+		<div v-if="item.app_type !== 'system' && !isUninstalling && hasActions" class="action-btn">
+			<b-dropdown ref="dro" :mobile-modal="false" :triggers="['contextmenu', 'click']" animation="fade1"
+				append-to-body aria-role="list" class="app-card-drop" :position="dropdownPosition"
+				@active-change="setDropState">
+				<template #trigger>
+					<p role="button" @click="handleDorpdownPosition">
+						<b-icon class="is-clickable" icon="dots-vertical-outline" pack="casa" />
+					</p>
+				</template>
+
+				<!-- A git app no deployment has given a container: its panel, which holds the
+					Repository tab, and deleting it are all there is to do with it. -->
+				<b-dropdown-item v-if="isGitAppWithoutContainer" :focusable="false" aria-role="menu-item" custom
+					:style="menuStyle">
+					<b-button v-if="canWrite" expanded type="is-text" @click="configApp()">
+						{{ $t('Setting') }}
+					</b-button>
+					<b-button v-if="canWrite" class="has-text-red" expanded type="is-text" @click="deleteGitAppConfirm">
+						{{ $t('Delete') }}
+					</b-button>
+				</b-dropdown-item>
+				<b-dropdown-item v-else :focusable="false" aria-role="menu-item" custom
+					:style="menuStyle">
+					<!-- a container CasaOS did not install has no app to open, start or
+						uninstall: the one thing it can be offered is the recreate below -->
+					<template v-if="!isContainerApp">
+						<b-button v-if="item.status === 'running'" expanded tag="a" type="is-text" @click="openApp(item)">
+							{{
+								$t('Open') }}
+						</b-button>
+						<b-button v-else-if="canWrite" expanded tag="a" type="is-text" @click="openApp(item)">
+							{{
+								$t('launch-and-open') }}
+						</b-button>
+					</template>
+					<b-button v-if="compact && !isContainerApp" expanded type="is-text" @click="toggleFavorite">
+						{{ favorite ? $t('Remove from favorites') : $t('Add to favorites') }}
+					</b-button>
+					<b-button v-if="isV2App && canWrite" expanded icon-pack="casa" icon-right="question-outline" size="is-16"
+						type="is-text" @click="openTips(item.name)">
+						{{ $t('Tips') }}
+					</b-button>
+					<b-button v-if="canWrite && (isV2App || isLinkApp)" expanded type="is-text" @click="configApp()">
+						{{
+							$t('Setting')
+						}}
+					</b-button>
+
+					<!-- imported apps too: for those the update is a pull of the tags they already
+						name, which is the only kind of update they can have -->
+					<b-button v-if="canWrite && isV2App" expanded type="is-text" @click="checkAppVersion(item.name)">
+						{{
+							$t('Check then update')
+						}}
+						<b-loading :active="isCheckThenUpdate || isUpdating" :is-full-page="false">
+							<img :src="require('@/assets/img/loading/waiting.svg')" alt="pending" class="ml-4 is-24x24">
+						</b-loading>
+					</b-button>
+
+					<b-button v-if="logsAvailable && (isV2App || (isV1App && canWrite))" expanded type="is-text" @click="showLogs()">
+						{{ $t('Logs') }}
+					</b-button>
+
+					<b-button v-if="isContainerApp" expanded type="is-text" @click="showContainerDetail()">
+						{{
+							$t('Details')
+						}}
+					</b-button>
+
+					<!-- container only, and only one that belongs to no compose project: see canRecreate -->
+					<b-button v-if="canWrite && canRecreate" :loading="isRecreating" expanded type="is-text"
+						@click="recreateConfirm">
+						{{
+							$t('Pull image and recreate')
+						}}
+					</b-button>
+
+					<b-button v-if="canWrite && isV2App" expanded type="is-text" @click="backupApp()">
+						{{
+							$t('Back up')
+						}}
+					</b-button>
+
+					<b-button v-if="canWrite && isV2App && publicShare.ok" expanded type="is-text" @click="shareApp()">
+						{{
+							$t('Share on the Internet')
+						}}
+					</b-button>
+
+					<b-button v-if="isV1App && canWrite" expanded type="is-text" @click="exportYAML(item)">
+						{{
+							$t('Export as Compose')
+						}}
+					</b-button>
+
+					<b-button v-if="canWrite && isV1App" :loading="isRebuilding" expanded type="is-text" @click="rebuild(item)">
+						{{
+							$t('Rebuild')
+						}}
+					</b-button>
+
+					<b-button v-if="canWrite && isLinkApp" class="mb-1" expanded type="is-text" @click="uninstallApp(true)">
+						{{ $t('Delete') }}
+						<b-loading v-model="isUninstalling" :is-full-page="false">
+							<img :src="require('@/assets/img/loading/waiting.svg')" alt="pending" class="ml-4 is-24x24">
+						</b-loading>
+					</b-button>
+					<b-button v-else-if="canWrite && !isContainerApp" class="has-text-red" expanded type="is-text"
+						@click="uninstallConfirm">
+						{{ $t('Uninstall') }}
+						<b-loading v-model="isUninstalling" :is-full-page="false">
+							<img :src="require('@/assets/img/loading/waiting.svg')" alt="pending" class="ml-4 is-24x24">
+						</b-loading>
+					</b-button>
+
+					<div v-if="canWrite && !isLinkApp && !isContainerApp" class="gap">
+						<div class="columns is-gapless _b-bor is-flex">
+							<div class="column is-flex is-justify-content-center is-align-items-center">
+								<b-button :loading="isRestarting" expanded type="is-text" :disabled="item.status !== 'running'"
+									@click="restartApp">
+									<b-icon custom-size="is-size-20px" icon="restart-outline" pack="casa" />
+								</b-button>
+							</div>
+							<div class="column is-flex is-justify-content-center is-align-items-center">
+								<b-button :class="item.status" :loading="isStarting" class="has-text-red" expanded
+									type="is-text" @click="toggle(item)">
+									<b-icon custom-size="is-size-20px" icon="shutdown-outline" pack="casa"
+										:custom-class="shutDownClass" />
+								</b-button>
+							</div>
+						</div>
+					</div>
+				</b-dropdown-item>
+			</b-dropdown>
+		</div>
+		<!-- Action Button End -->
+		<!-- System apps have no action button: this chip says what they are. The icon is hidden, the chip names it once. -->
+		<span v-if="item.app_type === 'system'" :aria-label="$t('System app')" :title="$t('System app')" class="system-marker" role="img">
+			<b-icon aria-hidden="true" custom-size="mdi-14px" icon="cog-outline" />
+		</span>
+		<div class="blur-background"></div>
+		<div class="cards-content">
+			<!-- Card Content Start -->
+			<b-tooltip :always="isActiveTooltip" :animated="true" :label="tooltipLabel" :position="tipSide" :triggers="tooltipTriger"
+				animation="fade1" class="in-card" type="is-white">
+				<div class="has-text-centered is-flex is-justify-content-center is-flex-direction-column pt-5 pb-3px img-c">
+					<div class="is-flex is-justify-content-center">
+						<div class="is-relative">
+							<b-image :alt="statsBadge ? statsBadge.label : undefined" :class="dotClass(item.status, isLoading)" :src="item.icon"
+								:src-fallback="require('@/assets/img/app/default.svg')" class="is-64x64"
+								webp-fallback=".jpg" @click="!compact && openApp(item)" />
+							<!-- The number of active resource alerts, on the Statistics card only. Numbers only: the words are the icon's alt. -->
+							<span v-if="statsBadge" aria-hidden="true" class="stats-badge">{{ statsBadge.text }}</span>
+							<!-- Unstable -->
+							<!-- the compact card has no NEW marker, and says an update in its own chip -->
+							<CTooltip v-if="!compact && newAppIds.includes(item.name)" class="__position" content="NEW" />
+							<!-- Shown from what the last image check found, so an app nobody has
+								checked yet carries no badge rather than a claim of being current.
+								v-else so it never stacks on top of the NEW marker. -->
+							<!-- A git app's state, or its new commits: gitApps.js says which wins. Before
+								the image badge, since a failed build matters more than a newer image. -->
+							<CTooltip v-else-if="repoBadge" :content="repoBadge.label" :modal="repoBadge.type" class="__position __position-wide" />
+							<CTooltip v-else-if="!compact && item.update_available" class="__position __position-wide" content="Update available" />
+							<!-- a newer version of an image pinned to one: said, chosen in the settings -->
+							<CTooltip v-else-if="!compact && newerBadge" :title="$t('{image}: {tag} is out. Choose it in the Tag list of the settings.', { image: newerBadge.image, tag: newerBadge.tag })"
+								:aria-label="$t('{image}: {tag} is out. Choose it in the Tag list of the settings.', { image: newerBadge.image, tag: newerBadge.tag })"
+								class="__position __position-wide" :content="newerBadge.tag" data-newer-badge />
+						</div>
+
+						<!-- Loading Bar Start -->
+						<b-loading :active="isLoading" :can-cancel="false" :is-full-page="false"
+							class="has-background-gray-800 op80 is-64x64"
+							style="top: auto;bottom: auto; right: auto; left: auto; border-radius: 11.5px">
+							<img :src="require('@/assets/img/loading/waiting-white.svg')" alt="loading" class="is-20x20">
+						</b-loading>
+						<!-- Loading Bar End -->
+					</div>
+
+					<div class="app-text">
+						<p class="mt-3 title-row">
+							<!-- an app whose compose file has no x-casaos has no title: its name is what it is called -->
+							<a class="one-line" style="cursor:default">
+								{{ i18n(item.title) || item.name }}
+							</a>
+							<!-- its scheduled backups, by the title; nothing for an app without a schedule or while the box cannot say -->
+							<BackupBadge v-if="backupBadge" :kind="backupBadge.kind" :title="backupBadge.title" />
+							<!-- the address it answers at on the Internet, as the core sends it -->
+							<span v-if="publicUrl" class="public-badge" :title="publicUrl">{{ $t('Public') }}</span>
+						</p>
+
+						<!-- beta dashboard: whether the app is up, under its name -->
+						<p v-if="compact && item.app_type !== 'system'" class="one-line app-state">
+							<span :class="healthWarning ? healthWarning.dot : item.status === 'running' ? 'is-running' : 'is-stopped'" class="state-dot"></span>
+							{{ healthWarning ? $t(healthWarning.label) : item.status === 'running' ? $t('Running') : $t('Stopped') }}
+							<template v-if="memory > 0 && item.status === 'running'"> · {{ renderSize(memory) }}</template>
+						</p>
+
+						<!-- Docker hands out names like `adoring_antonelli`, and a container
+							whose name it never set falls back to its id. For those cards the
+							name identifies nothing, and the image does. -->
+						<p v-if="compact && subtitle" class="one-line app-state">{{ subtitle }}</p>
+
+						<p v-if="facts.length" class="one-line has-text-full-03 _facts">
+							{{ facts.join(' · ') }}
+						</p>
+						<!-- The compose list could not load this container's stack. Saying so, with
+							the loader's words on hover and in the detail panel, turns "why can I not
+							edit it" into something to fix. -->
+						<!-- It runs, and its health check is not passing: without this line an app
+							whose database stopped answering looks like one in good shape. The beta
+							card says it in its state line above. -->
+						<p v-if="!compact && healthWarning" :class="healthWarning.text" class="one-line _facts">
+							{{ $t(healthWarning.label) }}
+						</p>
+						<p v-if="item.compose_load_error" class="one-line has-text-warning _facts" :title="item.compose_load_error">
+							{{ $t('CasaOS cannot read its compose file.') }}
+						</p>
+					</div>
+				</div>
+			</b-tooltip>
+			<!-- Card Content End -->
+		</div>
+	</div>
+</template>
+
+<script>
+import isNull from 'lodash/isNull'
+import YAML from 'yaml'
+import FileSaver from 'file-saver'
+import escape from 'lodash/escape'
+import { ageKey, containerFacts } from './legacyApps'
+import { gitBadge, withoutContainer } from './gitApps'
+import { appHealthWarning } from './containerSummary'
+import { newerBadgeOf } from './newerTags'
+import BackupAppModal from './BackupAppModal.vue'
+import ContainerDetailPanel from './ContainerDetailPanel.vue'
+import ShareAppModal from '@/components/PublicShare/ShareAppModal.vue'
+import { appEntry } from '@/components/PublicShare/shareWords'
+import { publicShare, refresh as refreshPublicShare } from '@/service/publicShare'
+import BackupBadge from '@/components/backup/BackupBadge.vue'
+import { badgeOfApp } from '@/components/backup/backupStatus'
+import { backupStatus, refresh as refreshBackupStatus } from '@/service/backupStatus'
+import { alertBadge } from '@/components/Stats/alertBadge'
+import { STATS_APP_NAME, openStatistics } from '@/components/Stats/entry'
+import { VM_APP_NAME, openVirtualMachines } from '@/components/VirtualMachines/entry'
+import { FLEET_APP_NAME, openFleet } from '@/components/Fleet/entry'
+import { LOGS_APP_NAME, hasLogs, openLogs } from '@/components/Logs/entry'
+import events from '@/events/events'
+import cTooltip from '@/components/basicComponents/tooltip/tooltip.vue'
+import business_ShowNewAppTag from '@/mixins/app/Business_ShowNewAppTag'
+import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
+import business_LinkApp from '@/mixins/app/Business_LinkApp'
+import { renderSize } from '@/mixins/file_utils'
+import tipEditorModal from '@/components/Apps/TipEditorModal.vue'
+import commonI18n, { ice_i18n } from '@/mixins/base/common-i18n'
+import { menuPlace, tipSide } from '@/components/Apps/menuSide'
+
+// Query parameter carrying the ID of the container a recreate was asked for. The
+// backend copies every query parameter of the request into the properties of the
+// events it publishes for it, so this comes back on each app:update-* of that
+// recreate and on no other event.
+const RECREATE_TAG = 'recreate:container:id'
+// A rebuild is an install of a compose app made from a v1 container, and the
+// events of that install name the compose app -- which is not the name this
+// card knows the container by. So the card sends the container's id along as a
+// query parameter, which AppManagement echoes onto every event of the request,
+// and matches on that. The same mechanism a recreate uses, under its own name.
+// It used to smuggle the id through the boolean `dry_run` parameter as an
+// object the client happened to flatten to `dry_run.name`, which worked by
+// accident of the serializer.
+const REBUILD_TAG = 'rebuild:container:id'
+
+export default {
+	name: 'AppCard',
+	components: {
+		CTooltip: cTooltip,
+		BackupBadge,
+	},
+	mixins: [business_ShowNewAppTag, business_OpenThirdApp, business_LinkApp, commonI18n],
+	inject: ['homeShowFiles', 'openAppStore'],
+	props: {
+		item: {
+			type: Object,
+		},
+		// beta dashboard: the icon beside the name and the state, not above it
+		compact: {
+			type: Boolean,
+			default: false,
+		},
+		// beta dashboard: pinned in the favorites; the second line of a system card
+		favorite: {
+			type: Boolean,
+			default: false,
+		},
+		subtitle: {
+			type: String,
+			default: '',
+		},
+		// bytes the app's containers use (compact card)
+		memory: {
+			type: Number,
+			default: 0,
+		},
+	},
+	data() {
+		return {
+			publicShare,
+			hover: false,
+			dropState: false,
+			isUninstalling: false,
+			isCloning: false,
+			isCheckThenUpdate: false,
+			isUpdating: false,
+			isRestarting: false,
+			isStarting: false,
+			isRebuilding: false,
+			isRecreating: false,
+			// isStoping: false,
+			// Public. Only changes the state of the card, not the state of the button.
+			isSaving: false,
+			isActiveTooltip: false,
+			// above or below the card, on the side with more room: never beside it, where it hides the next card
+			tipSide: 'is-top',
+			dropdownPosition: 'is-bottom-right',
+			menuMaxHeight: null,
+			// whether AppManagement keeps logs: an older one gets no Logs entry
+			logsAvailable: false,
+		}
+	},
+
+	computed: {
+		// the smallest newer version the box found for the app's pinned images
+		newerBadge() {
+			return newerBadgeOf(this.item.newer_tags)
+		},
+		// set while the app runs and its health check fails or has not passed yet
+		healthWarning() {
+			return appHealthWarning(this.item)
+		},
+		// the menu scrolls inside the room it has when it fits neither above nor below the card
+		menuStyle() {
+			return this.menuMaxHeight ? { maxHeight: `${this.menuMaxHeight}px`, overflowY: 'auto' } : null
+		},
+		// where this app answers on the Internet, as the core sends it; '' unless shared
+		publicUrl() {
+			const entry = publicShare.ok ? appEntry(publicShare.status, this.item.name) : null
+			return entry?.shared ? entry.url : ''
+		},
+		// the worst state of this app's scheduled backups, from the box's own answers; null without a schedule
+		backupBadge() {
+			return backupStatus.ok ? badgeOfApp(backupStatus.states, this.item.name, this.$t) : null
+		},
+		// The count of active resource alerts, for the Statistics card: its number and the sentence that names it.
+		statsBadge() {
+			// the system app only: an app a person installed may carry the same name
+			const total = this.item.app_type === 'system' && this.item.name === STATS_APP_NAME ? alertBadge.total() : 0
+			if (!(total > 0)) {
+				return null
+			}
+			return {
+				text: total > 99 ? '99+' : String(total),
+				label: this.$t(total === 1 ? 'Statistics, {count} active alert' : 'Statistics, {count} active alerts', { count: total }),
+			}
+		},
+		tooltipLabel() {
+			if (this.isRecreating) {
+				return this.$t('Recreating')
+			} else if (this.isContainerApp) {
+				return this.$t('Import to CasaOS')
+			} else if (this.item.app_type === 'system') {
+				return this.$t('Open')
+			} else if (this.isUpdating) {
+				return this.$t('Updating')
+			} else if (this.isUninstalling) {
+				return this.$t('Uninstalling')
+			} else if (this.isCloning) {
+				return this.$t('Cloning')
+			} else if (this.isRestarting) {
+				return this.$t('Restarting')
+			} else if (this.isStarting) {
+				return this.$t('updateState')
+			} else if (!this.canWrite && this.item.status !== 'running' && !this.isLinkApp) {
+				return this.$t('{name} is stopped: only the owner can start it.', { name: this.containerName })
+			} else if (this.isRebuilding) {
+				return this.$t('Rebuilding')
+			} else if (this.isCheckThenUpdate) {
+				return this.$t('CheckThenUpdate')
+			} else if (this.isGitAppWithoutContainer) {
+				// nothing to launch: a click opens its panel
+				return this.$t('Setting')
+			} else if (this.item.status === 'running') {
+				return this.$t('Open')
+			} else {
+				return this.$t('launch-and-open')
+			}
+		},
+		tooltipTriger() {
+			return ['hover']
+			// if (this.isContainerApp || this.item.app_type === "system" || this.item.status === 'running') {
+			//  eturn ['hover'];
+			// } else {
+			//  return [];
+			// }
+		},
+		isLoading() {
+			const active = this.isUninstalling || this.isUpdating || this.isRestarting || this.isStarting || this.isSaving || this.isRebuilding || this.isRecreating // || this.isStoping || this.isSaving
+			return active
+		},
+		isV1App() {
+			return this.item.app_type === 'v1app'
+		},
+		isV2App() {
+			return this.item.app_type === 'v2app'
+		},
+		// Only for the cards whose name says nothing: an app installed from the
+		// catalogue has a title, an icon and a place, and repeating its image under
+		// it would be noise on every tile of the grid.
+		facts() {
+			if (this.item.app_type !== 'container' && this.item.app_type !== 'v1app')
+				return []
+
+			return containerFacts(this.item, seconds => this.$t(ageKey(seconds)))
+		},
+
+		isContainerApp() {
+			return this.item.app_type === 'container'
+		},
+		// from the grid item's `git`, which only a git app carries
+		repoBadge() {
+			return gitBadge(this.item.git)
+		},
+		isGitAppWithoutContainer() {
+			return withoutContainer(this.item)
+		},
+		isLinkApp() {
+			return this.item.app_type === 'LinkApp'
+		},
+		// The recreate endpoint takes a raw container ID and knows nothing of compose:
+		// run on a container of a compose app it would clone that container out of the
+		// project and leave the project's own state behind. app_type does not say that
+		// much on its own -- the backend calls `container` anything without a casaos
+		// label that its compose list did not claim, and that list silently skips a
+		// project whose config file it cannot read (a Portainer or Dockge stack whose
+		// config_files path this host cannot reach). The project label the container
+		// itself carries is what says otherwise.
+		canRecreate() {
+			return this.isContainerApp && !this.item.compose_project
+		},
+		// Every entry of the menu is for an app CasaOS installed, except the recreate,
+		// which is refused for a container a compose project owns -- so that container
+		// had a dots button that opened onto nothing at all. No menu says the same thing
+		// and does not ask to be clicked first.
+		// A container card now always has a menu: even one a compose project owns can
+		// be looked at, which is the whole point of the panel -- the old rule left
+		// those cards with no way to find out what they were.
+		canWrite() {
+			return this.$store.getters.canWrite
+		},
+		hasActions() {
+			return true
+		},
+		// a container card is keyed by container ID, while the grid puts the Docker
+		// name of an imported container in its title -- the name to show a human
+		containerName() {
+			return this.i18n(this.item.title) || this.item.name
+		},
+		shutDownClass() {
+			return this.item.status !== 'running' ? 'shutdown-rounded' : ''
+		},
+
+	},
+
+	watch: {
+		hover(val) {
+			if (!val && this.dropState)
+				this.$refs.dro.toggle()
+		},
+		isLoading(active) {
+			// design :: The first display is three seconds long
+			if (this.isCheckThenUpdate && this.activeTimer === undefined) {
+				this.activeTimer = setTimeout(() => {
+					this.isActiveTooltip = false
+					clearTimeout(this.activeTimer)
+					this.activeTimer = undefined
+				}, 3000)
+				this.isActiveTooltip = true
+			} else if (active === false && this.isCheckThenUpdate === false && this.activeTimer) {
+				clearInterval(this.activeTimer)
+				this.activeTimer = undefined
+				this.isActiveTooltip = false
+			}
+		},
+	},
+
+	created() {
+		// shared and at most once a minute: every card may ask, an account that may read these modules
+		if (this.$store.getters.canReadModule('backups')) {
+			refreshBackupStatus()
+		}
+		if (this.$store.getters.canReadModule('share')) {
+			refreshPublicShare()
+		}
+		hasLogs().then((available) => {
+			this.logsAvailable = available
+		})
+	},
+
+	methods: {
+		// the menu may not be there (a card without actions)
+		closeMenu() {
+			if (this.$refs.dro) {
+				this.$refs.dro.isActive = false
+			}
+		},
+		onOver() {
+			this.hover = true
+			const rect = this.$el.getBoundingClientRect()
+			this.tipSide = tipSide(rect.top, window.innerHeight - rect.bottom)
+		},
+		renderSize,
+		handleDorpdownPosition(event) {
+			this.$nextTick(() => {
+				const rightOffset = window.innerWidth - event.clientX - 160
+				const horizontalPos = rightOffset > 0 ? 'right' : 'left'
+				const bottomOffset = window.innerHeight - event.clientY - 212
+				const verticalPos = bottomOffset > 0 ? 'bottom' : 'top'
+				this.dropdownPosition = `is-${verticalPos}-${horizontalPos}`
+			})
+		},
+		toggleFavorite() {
+			this.closeMenu()
+			this.$emit('toggleFavorite', this.item)
+		},
+		// the menu button has its own click; a card at work is not opened a second time
+		openFromCard(event) {
+			if (this.isLoading || (event.target.closest && event.target.closest('.action-btn'))) {
+				return
+			}
+			this.openApp(this.item)
+		},
+		/**
+		 * @description: Open app in new windows
+		 * @param {string} status App status
+		 * @param {string} port App access port
+		 * @param {string} index App access index
+		 * @return {*} void
+		 */
+		openApp(item) {
+			if (this.isContainerApp) {
+				// importing a container writes: an account that cannot write is shown what it is
+				if (!this.canWrite) {
+					this.showContainerDetail()
+					return false
+				}
+				this.$emit('importApp', item, false)
+				return false
+			}
+			if (this.isGitAppWithoutContainer) {
+				if (this.canWrite) {
+					this.configApp()
+				}
+				return false
+			}
+			if (item.app_type === 'system') {
+				this.openSystemApps(item)
+			} else if (this.isLinkApp) {
+				window.open(item.hostname, '_blank')
+				this.removeIdFromSessionStorage(item.name)
+			} else {
+				// type is one of 'official' or 'community'.
+				this.closeMenu()
+				if (item.status === 'running') {
+					this.openAppToNewWindow(item)
+				} else if (!this.canWrite) {
+					// starting an app is the owner's: nothing is asked of the box, the card tells it
+					this.$buefy.toast.open({
+						message: escape(this.$t('{name} is stopped: only the owner can start it.', { name: this.containerName })),
+						type: 'is-warning',
+						position: 'is-top',
+						duration: 4000,
+					})
+				} else {
+					this.toggle(item)
+					this.firstOpenThirdApp(item)
+				}
+			}
+		},
+
+		// Where "what is this" and "get rid of it" both live. Docker invented the
+		// name on these cards, so there was nowhere to answer either question.
+		showContainerDetail() {
+			this.closeMenu()
+			this.$buefy.modal.open({
+				component: ContainerDetailPanel,
+				hasModalCard: true,
+				customClass: 'container-detail-modal',
+				trapFocus: true,
+				canCancel: ['escape'],
+				animation: 'zoom-in',
+				props: { containerId: this.item.name, composeLoadError: this.item.compose_load_error || '' },
+				events: { removed: () => this.$emit('updateState') },
+			})
+		},
+
+		backupApp() {
+			this.closeMenu()
+			this.$buefy.modal.open({
+				component: BackupAppModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				animation: 'zoom-in',
+				props: { appId: this.item.name, appName: this.i18n(this.item.title) },
+			})
+		},
+
+		shareApp() {
+			this.closeMenu()
+			this.$buefy.modal.open({
+				component: ShareAppModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				animation: 'zoom-in',
+				props: { appName: this.item.name, appTitle: this.i18n(this.item.title) || this.item.name },
+			})
+		},
+
+		// The logs keep an app under the name AppManagement gives it: the compose project for a compose app, the
+		// container's name for a v1 app, whose card knows only the container's id.
+		async showLogs() {
+			let app = this.item.name
+			if (this.isV1App) {
+				try {
+					app = (await this.$api.container.getDetail(this.item.name)).data.data?.name || app
+				} catch {}
+			}
+			openLogs(this.$buefy, this.$store.state, { app })
+		},
+
+		openSystemApps(item) {
+			switch (item.name) {
+				case 'App Store':
+					this.openAppStore()
+					break
+				case 'Files':
+					this.homeShowFiles()
+					break
+				case VM_APP_NAME:
+					openVirtualMachines(this.$buefy, this.$store.state)
+					break
+				case STATS_APP_NAME:
+					openStatistics(this.$buefy, this.$store.state)
+					break
+				case FLEET_APP_NAME:
+					openFleet(this.$buefy, this.$store.state)
+					break
+				case LOGS_APP_NAME:
+					openLogs(this.$buefy, this.$store.state)
+					break
+				default:
+					break
+			}
+		},
+
+		/**
+		 * @description: Set drop-down menu status
+		 * @param {boolean} e
+		 * @return {*} void
+		 */
+		setDropState(e) {
+			this.dropState = e
+			if (e) {
+				// Buefy shows the menu and places it (from the position prop as it was) after this event:
+				// measure once it is shown, then ask Buefy to place it again. The menu grew with logs,
+				// backup and sharing entries, so measure it rather than guess a height.
+				this.$nextTick(() => setTimeout(async () => {
+					const dro = this.$refs.dro
+					const menu = dro && dro.$refs.dropdownMenu
+					const trigger = dro && dro.$refs.trigger
+					if (!menu || !trigger || !dro.isActive) {
+						return
+					}
+					// measure the menu at its natural height, not the one capped on an earlier opening
+					this.menuMaxHeight = null
+					await this.$nextTick()
+					if (!menu.offsetHeight) {
+						return
+					}
+					const rect = trigger.getBoundingClientRect()
+					const horizontal = this.dropdownPosition.split('-')[2]
+					const { side, maxHeight } = menuPlace(rect.top, window.innerHeight - rect.bottom, menu.offsetHeight)
+					this.dropdownPosition = `is-${side}-${horizontal}`
+					// 8px: the padding of the menu around its item
+					this.menuMaxHeight = maxHeight ? maxHeight - 8 : null
+					await this.$nextTick()
+					dro.updateAppendToBody()
+				}, 0))
+			}
+		},
+
+		/**
+		 * @description: Restart Application
+		 * @return {*} void
+		 */
+		restartApp() {
+			this.$messageBus('apps_restart', this.item.name)
+			this.isRestarting = true
+			if (this.isV2App) {
+				this.restartAppV2()
+			} else if (this.isV1App) {
+				this.restartAppV1()
+			}
+			this.closeMenu()
+		},
+
+		restartAppV1() {
+			this.$api.container.updateState(this.item.name, 'restart').then((res) => {
+				if (res.data.success === 200) {
+					this.updateState()
+				}
+			}).catch((err) => {
+				this.$buefy.toast.open({
+					message: escape(err.response.data.data || err.response.data.message),
+					type: 'is-danger',
+					position: 'is-top',
+					duration: 5000,
+				})
+			}).finally(() => {
+				this.isRestarting = false
+			})
+		},
+
+		restartAppV2() {
+			this.$openAPI.appManagement.compose.setComposeAppStatus(this.item.name, 'restart').then(() => {
+				this.updateState()
+			}).catch((err) => {
+				this.$buefy.toast.open({
+					message: escape(err.response.data.data || err.response.data.message),
+					type: 'is-danger',
+					position: 'is-top',
+					duration: 5000,
+				})
+			})
+		},
+
+		/**
+		 * @description: Confirm before uninstall
+		 * @return {*} void
+		 */
+		uninstallConfirm() {
+			this.$messageBus('apps_uninstall', this.item.name)
+			this.closeMenu()
+			this.$buefy.dialog.confirm({
+				title: this.$t('Attention'),
+				message: this.$t(`Data cannot be recovered after deletion! <br/>Continue on to uninstall this application?<br/>{divS}Delete userdata ( config folder ){divE}`, {
+					divS: `<div class="is-flex is-align-items-center mt-4"><input type="checkbox"  id="checkDelConfig">`,
+					divE: `</input></div>`,
+				}),
+				type: 'is-dark',
+				confirmText: this.$t('Uninstall'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: () => {
+					const checkDelConfig = document.getElementById('checkDelConfig') ? document.getElementById('checkDelConfig').checked : false
+					this.uninstallApp(checkDelConfig)
+				},
+			})
+		},
+
+		// A git app with no container goes through its own route, which takes what
+		// CasaOS cloned, built or left behind for it: the compose route knows no such app.
+		deleteGitAppConfirm() {
+			this.closeMenu()
+			this.$buefy.dialog.confirm({
+				title: this.$t('Attention'),
+				message: escape(this.$t('Delete {name}? What CasaOS cloned, built or started for it goes with it; the repository itself is not touched.', { name: this.containerName })),
+				type: 'is-dark',
+				confirmText: this.$t('Delete'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: () => this.deleteGitApp(),
+			})
+		},
+
+		async deleteGitApp() {
+			this.isUninstalling = true
+			try {
+				await this.$api.gitApps.remove(this.item.name)
+				this.removeIdFromSessionStorage(this.item.name)
+				// the section reads the grid again, and this card is gone from it
+				this.$emit('updateState')
+			} catch (err) {
+				this.isUninstalling = false
+				this.$buefy.toast.open({
+					message: escape(err.response?.data?.message || err.message),
+					type: 'is-danger',
+					position: 'is-top',
+					duration: 5000,
+				})
+			}
+		},
+
+		/**
+		 * @description: Uninstall app
+		 * @return {*} void
+		 */
+		uninstallApp(checkDelConfig) {
+			this.isUninstalling = true
+			this.removeIdFromSessionStorage(this.item.name)
+			if (this.isLinkApp) {
+				this.deleteLinkAppByName(this.item.name).then((res) => {
+					if (res.data.success === 200) {
+						this.$EventBus.$emit(events.RELOAD_APP_LIST)
+					}
+				})
+			} else if (this.isV2App) {
+				this.$openAPI.appManagement.compose.uninstallComposeApp(this.item.name, checkDelConfig).then((res) => {
+					if (res.status === 200) {
+						this.$EventBus.$emit(events.UPDATE_SYNC_STATUS)
+					}
+				}).catch((err) => {
+					this.$buefy.toast.open({
+						message: escape(err.response.data.data),
+						type: 'is-danger',
+						position: 'is-top',
+						duration: 5000,
+					})
+				})
+			} else {
+				// former app uninstall
+				this.$api.container.uninstall(this.item.name, { delete_config_folder: checkDelConfig }).then((res) => {
+					if (res.data.success === 200) {
+						this.$EventBus.$emit(events.UPDATE_SYNC_STATUS)
+					}
+				}).catch((err) => {
+					this.$buefy.toast.open({
+						message: escape(err.response.data.data),
+						type: 'is-danger',
+						position: 'is-top',
+						duration: 5000,
+					})
+				})
+			}
+		},
+
+		/**
+		 * @description: Confirm before pulling a newer image and recreating an imported container
+		 * @return {*} void
+		 */
+		recreateConfirm() {
+			this.closeMenu()
+			this.$buefy.dialog.confirm({
+				title: this.$t('Attention'),
+				message: escape(this.$t('{name} will be stopped and replaced by a new container running the newest image. Its volumes and bind mounts are carried over with the data in them; anything written elsewhere inside the container is lost with it. Its settings are copied from the container as it runs now, and CasaOS keeps no copy of them: this container was imported, not installed by CasaOS. If no newer image is published, nothing is touched.', { name: this.containerName })),
+				type: 'is-dark',
+				confirmText: this.$t('Recreate container'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: () => {
+					this.recreateContainer()
+				},
+			})
+		},
+
+		recreateContainer() {
+			this.isRecreating = true
+			// force stays off: without a newer image there is nothing to gain from
+			// destroying a container whose definition exists nowhere else.
+			// Every query parameter of this request comes back as a property on the
+			// app:update-* events it publishes, which is the only way to tell our own
+			// recreate from anything else updating at the same time (see recreateTag).
+			const params = { [RECREATE_TAG]: this.item.name }
+			this.$openAPI.appManagement.container.recreateContainerByID(this.item.name, true, undefined, { params }).catch((err) => {
+				this.isRecreating = false
+				this.$buefy.toast.open({
+					message: escape(err.response?.data?.message || this.$t('Unable to update at the moment!')),
+					type: 'is-danger',
+					duration: 5000,
+				})
+			})
+		},
+
+		// The recreate publishes the same app:update-* events as a compose update, so
+		// they have to be told apart by a property. Not app:name: the backend fills it
+		// from the container's `name` label when there is one, and Config.Labels carries
+		// what the IMAGE declared too -- every Red Hat UBI-derived image sets `name`, and
+		// the event then names the image, not the container. The tag we sent with the
+		// request is ours alone.
+		// Not `this.isRecreating &&`: the backend publishes app:update-error from a
+		// goroutine and app:update-end from a defer, so which arrives first is a race.
+		// Whichever came first cleared the flag, and the second was then dropped -- a
+		// recreate that pulled and then failed to clone said nothing at all. The tag is
+		// the container id we asked for, which identifies the recreate on its own.
+		isRecreateEvent(data) {
+			return data.Properties[RECREATE_TAG] === this.item.name
+		},
+
+		// What a finished recreate proves, and nothing further. app:updated is set only
+		// when the container was really replaced; docker:image:updated only when a pull
+		// got as far as an answer. A pull that failed leaves both absent, and silence
+		// about a newer image is not evidence that there is none -- claiming there is
+		// none is how a host stops hearing about updates. Null: say nothing, because
+		// app:update-error is already carrying the reason.
+		recreateOutcome(properties) {
+			if (properties['app:updated'] === 'true') {
+				return {
+					message: this.$t('{name} now runs the image that was just pulled.', { name: this.containerName }),
+					type: 'is-success',
+				}
+			}
+			if (properties['docker:image:updated'] === 'false') {
+				return {
+					message: this.$t('{name} already runs the newest image, so it was left as it is.', { name: this.containerName }),
+					type: 'is-success',
+				}
+			}
+			if (properties['docker:image:updated'] === 'true')
+				return null
+			return {
+				message: this.$t('Could not check whether a newer image exists for {name}. It keeps the image it has.', { name: this.containerName }),
+				type: 'is-warning',
+			}
+		},
+
+		/**
+		 * @description: Emit the event that the app has been updated
+		 * @return {*} void
+		 */
+		updateState() {
+			this.closeMenu()
+			this.$emit('updateState')
+			this.$EventBus.$emit(events.UPDATE_SYNC_STATUS)
+		},
+
+		async openTips(name) {
+			try {
+				const ret = await this.$openAPI.appManagement.compose.myComposeApp(name, {
+					headers: {
+						'content-type': 'application/yaml',
+						'accept': 'application/yaml',
+					},
+				}).then(res => res.data)
+				this.closeMenu()
+				this.$buefy.modal.open({
+					component: tipEditorModal,
+					hasModalCard: true,
+					customClass: 'network-storage-modal',
+					trapFocus: true,
+					canCancel: [],
+					// scroll: "keep",
+					animation: 'zoom-in',
+					props: {
+						composeData: YAML.parse(ret),
+						name,
+					},
+				})
+			} catch (e) {
+				console.error('openTips Error:', e)
+			}
+		},
+
+		/**
+		 * @description: Emit the event that the app has been updated with custom_id
+		 * @return {*} void
+		 */
+		configApp() {
+			this.$messageBus('apps_setting', this.item.name)
+			this.closeMenu()
+			this.$emit('configApp', this.item, this.isV2App)
+		},
+
+		/**
+		 * @description: Start or Stop App
+		 * @param {object} item the app info object
+		 * @return {*} void
+		 */
+		toggle(item) {
+			// only have 'apps_stop' event
+			this.$messageBus('apps_stop', item.name)
+			this.isStarting = true
+			const status = item.status === 'running' ? 'stop' : 'start'
+			if (this.isV2App) {
+				this.toggleAppV2(item, status)
+			} else if (this.isV1App) {
+				this.toggleAppV1(item, status)
+			}
+			this.closeMenu()
+		},
+
+		toggleAppV1(item, status) {
+			this.$api.container.updateState(item.name, status).then((res) => {
+				if (res.data.success === 200) {
+					item.status = res.data.data
+					this.updateState()
+				} else {
+					this.$buefy.dialog.alert({
+						title: 'Error',
+						message: escape(res.data.data || res.data.message),
+						type: 'is-danger',
+						ariaRole: 'alertdialog',
+						ariaModal: true,
+					})
+				}
+			}).catch((err) => {
+				this.$buefy.toast.open({
+					message: escape(err.response?.data?.data || err.response?.data?.message || err.message || ''),
+					type: 'is-danger',
+					position: 'is-top',
+					duration: 3000,
+				})
+			}).finally(() => {
+				this.isStarting = false
+			})
+		},
+
+		toggleAppV2(item, status) {
+			this.$openAPI.appManagement.compose.setComposeAppStatus(item.name, status).then(() => {
+				this.updateState()
+				item.status = status
+			}).catch((err) => {
+				// the spinner stops whatever the failure: the bus is not there to say it
+				this.isStarting = false
+				this.$buefy.dialog.alert({
+					title: 'Error',
+					message: escape(err.response?.data?.data || err.response?.data?.message || err.message || ''),
+					type: 'is-danger',
+					ariaRole: 'alertdialog',
+					ariaModal: true,
+				})
+			})
+		},
+
+		appClone(name) {
+			this.isCloning = true
+			this.$api.apps.getAppInfo(name).then((resp) => {
+				if (resp.data.success === 200) {
+					const respData = resp.data.data
+					// messageBus :: apps_clone
+					this.$messageBus('apps_clone', this.item.name.toString())
+
+					const initData = {}
+					initData.protocol = respData.protocol
+					initData.host = respData.host
+					initData.port_map = respData.port_map
+					initData.cpu_shares = 50
+					initData.memory = respData.max_memory
+					initData.restart = 'always'
+					initData.label = respData.title
+					initData.position = true
+					initData.index = respData.index
+					initData.icon = respData.icon
+					initData.network_model = respData.network_model
+					initData.image = respData.image
+					initData.description = respData.description
+					initData.origin = respData.origin
+					initData.ports = isNull(respData.ports) ? [] : respData.ports
+					initData.volumes = isNull(respData.volumes) ? [] : respData.volumes
+					initData.envs = isNull(respData.envs) ? [] : respData.envs
+					initData.devices = isNull(respData.devices) ? [] : respData.devices
+					initData.cap_add = isNull(respData.cap_add) ? [] : respData.cap_add
+					initData.cmd = isNull(respData.cmd) ? [] : respData.cmd
+					initData.privileged = respData.privileged
+					initData.host_name = respData.host_name
+					initData.appstore_id = name
+
+					this.$api.container.install(initData).catch((err) => {
+						this.$buefy.toast.open({
+							message: escape(err.response.data.message),
+							type: 'is-warning',
+						})
+					}).then(() => {
+						this.isCloning = false
+						this.closeMenu()
+					})
+				}
+			}).catch(() => {
+				this.$buefy.toast.open({
+					message: this.$t(`There was an error loading the data, please try again!`),
+					type: 'is-danger',
+				})
+			})
+		},
+
+		exportYAML(item) {
+			this.$api.container.exportAsCompose(item.name).then((res) => {
+				const blob = new Blob([res.data], { type: '' })
+				FileSaver.saveAs(blob, `${item.image}.yaml`)
+			}).catch((err) => {
+				this.$buefy.toast.open({
+					message: escape(err.response.data.message),
+					type: 'is-warning',
+				})
+			})
+		},
+
+		async rebuild(app) {
+			this.isRebuilding = true
+			try {
+				// 1. get yaml
+				const file = await this.$api.container.exportAsCompose(app.name).then(res => res.data)
+				// 2. archive
+				await this.$api.container.archive(app.name)
+				// 3.install compose
+				await this.$openAPI.appManagement.compose.installComposeApp(file, undefined, undefined, undefined, {
+					params: { [REBUILD_TAG]: app.name },
+				})
+			} catch (e) {
+				this.isRebuilding = false
+				console.error('rebuild Error:', e)
+				this.$buefy.toast.open({
+					message: this.$t(`Rebulid error`),
+					type: 'is-danger',
+				})
+			}
+			// 4.sockiet :: install-end :: change UI status.
+			// this.isRebuilding = false;
+			this.closeMenu()
+		},
+
+		checkAppVersion(name) {
+			this.isCheckThenUpdate = true
+			this.$openAPI.appManagement.compose.updateComposeApp(name).then((resp) => {
+				// 200:
+				if (resp.status === 200) {
+					// messageBus :: apps_checkThenUpdate
+					this.$messageBus('apps_checkupdate', this.item.name.toString())
+					this.$buefy.toast.open({
+						// value is `In the process of asynchronous updating.` or `compose app `app Name` is up to date`
+						message: escape(resp.data.message),
+						type: 'is-success',
+					})
+				} else {
+					this.$buefy.toast.open({
+						message: this.$t(`No updates are currently available for the application.`),
+						type: 'is-success',
+					})
+				}
+			}).catch(() => {
+				this.$buefy.toast.open({
+					message: this.$t(`Unable to update at the moment!`),
+					type: 'is-danger',
+				})
+			}).finally(() => {
+				this.closeMenu()
+				this.isCheckThenUpdate = false
+			})
+		},
+		/**
+		 * @description: Format Dot Class
+		 * @param {string} status
+		 * @return {string}
+		 */
+		dotClass(status, loadState) {
+			// For updating
+			if (loadState) {
+				if (status === '0' || status === 'running') {
+					return 'disabled start'
+				}
+				return 'disabled stop'
+			}
+			if (status === '0') {
+				return 'start'
+			} else {
+				return status === 'running' ? 'start' : 'stop'
+			}
+		},
+
+	},
+
+	sockets: {
+		'app:start-error': function (res) {
+			// toast info.
+			this.$buefy.toast.open({
+				message: escape(res.Properties.message),
+				duration: 5000,
+				type: 'is-danger',
+			})
+		},
+		'app:start-end': function (res) {
+			if (res.Properties['app:name'] === this.item.name) {
+				this.isRestarting = false
+				this.isStarting = false
+			}
+		},
+		'app:stop-error': function (res) {
+			// toast info.
+			this.$buefy.toast.open({
+				message: escape(res.Properties.message),
+				duration: 5000,
+				type: 'is-danger',
+			})
+		},
+		'app:stop-end': function (res) {
+			if (res.Properties['app:name'] === this.item.name) {
+				this.isRestarting = false
+				this.isStarting = false
+			}
+		},
+		'app:restart-error': function (res) {
+			// toast info.
+			this.$buefy.toast.open({
+				message: escape(res.Properties.message),
+				duration: 5000,
+				type: 'is-danger',
+			})
+		},
+		'app:restart-end': function (res) {
+			if (res.Properties['app:name'] === this.item.name) {
+				this.isRestarting = false
+				this.isStarting = false
+			}
+		},
+		'app:apply-changes-begin': function (res) {
+			if (res.Properties['app:name'] === this.item.name) {
+				this.isSaving = true
+			}
+		},
+		'app:apply-changes-error': function (res) {
+			// toast info.
+			this.$buefy.toast.open({
+				message: escape(res.Properties.message),
+				duration: 5000,
+				type: 'is-danger',
+			})
+		},
+		'app:apply-changes-end': function (res) {
+			if (res.Properties['app:name'] === this.item.name) {
+				this.isRestarting = false
+				this.isStarting = false
+				this.isSaving = false
+			}
+		},
+		/**
+		 * @description: Update App Status
+		 * @param {object} data
+		 * @return {void}
+		 */
+		'app:update-begin': function () {
+
+		},
+
+		'docker:image:pull-end': function (data) {
+			if (data.Properties['app:name'] === this.item.name) {
+				if (data.Properties['docker:image:updated'] === 'true') {
+					this.isUpdating = true
+				}
+				this.isCheckThenUpdate = false
+			}
+		},
+
+		'docker:image:pull-error': function (data) {
+			if (data.Properties['app:name'] === this.item.name) {
+				this.isCheckThenUpdate = false
+			}
+		},
+
+		/**
+		 * @description: Update App Version
+		 * @param {object} data
+		 * @return {void}
+		 */
+		'app:update-end': function (data) {
+			if (this.isRecreateEvent(data)) {
+				this.isRecreating = false
+				// a recreated container is a new container with a new ID, and the card
+				// still holds the old one
+				this.updateState()
+				const outcome = this.recreateOutcome(data.Properties)
+				if (outcome)
+					this.$buefy.toast.open({ message: escape(outcome.message), type: outcome.type, duration: 5000 })
+				return
+			}
+			if (data.Properties['app:name'] !== this.item.name)
+				return
+			if (data.Properties['app:updated'] === 'true') {
+				// the section reloads the grid on this one, and this card with it
+				return
+			}
+			this.isUpdating = false
+			// An App Store update publishes update-end whether it worked or failed:
+			// app:updated is the only thing that tells the two apart, and a failure
+			// also arrives on its own event, app:update-error. docker:image:updated
+			// comes from the v1 recreate path alone.
+			if (data.Properties['docker:image:updated'] === 'false') {
+				this.$buefy.toast.open({
+					message: escape(this.$t(`{appName} is the latest version!`, { appName: this.item.name })),
+					type: 'is-success',
+					duration: 5000,
+				})
+			}
+		},
+		'app:install-end': function (res) {
+			if (res.Properties[REBUILD_TAG] === this.item.name) {
+				// 4.sockiet :: install-end :: change UI status.
+				this.isRebuilding = false
+				// 5.message toast
+				this.$buefy.toast.open({
+					message: escape(this.$t(`{title} rebulid completed`, { title: ice_i18n(this.item.title) })),
+					type: 'is-success',
+				})
+			}
+		},
+		'app:install-error': function (res) {
+			if (res.Properties[REBUILD_TAG] === this.item.name) {
+				// 4.sockiet :: install-end :: change UI status.
+				this.isRebuilding = false
+				// 5.message toast
+				this.$buefy.toast.open({
+					message: escape(res.Properties.message),
+					type: 'is-warning',
+				})
+			}
+		},
+		// The only word a failed update gets: the update-end that follows carries no
+		// outcome, so if this event is dropped the failure is never shown at all. It is
+		// published by both update paths -- the compose one names the app, the recreate
+		// one names the container.
+		'app:update-error': function (data) {
+			if (!this.isRecreateEvent(data) && data.Properties['app:name'] !== this.item.name)
+				return
+			this.isRecreating = false
+			this.isUpdating = false
+			this.$buefy.toast.open({
+				message: escape(this.$t('Updating {name} failed: {reason}', {
+					name: this.containerName,
+					reason: data.Properties.message,
+				})),
+				type: 'is-danger',
+				duration: 5000,
+			})
+		},
+		// `id` is not a property any event carries, so a failed uninstall never
+		// reset the spinner. The event names its app the way every event does.
+		'app:uninstall-error': function (res) {
+			if (res.Properties['app:name'] === this.item.name) {
+				this.isUninstalling = false
+			}
+		},
+	},
+
+}
+</script>
+
+<style lang="scss">
+.public-badge {
+  flex: none;
+  margin-left: 0.35rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #1f6fe5;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  vertical-align: middle;
+}
+.pb-3px {
+  padding-bottom: 3px;
+}
+
+.shutdown-rounded {
+  border-radius: 50%;
+  background-color: #000;
+  color: #fff;
+}
+
+.app-card-drop {
+  .dropdown-menu {
+    min-width: 10rem;
+
+    .dropdown-content {
+      padding: 4px !important;
+      background: none;
+      background: var(--casa-surface);
+      border-radius: 10px;
+
+      .dropdown-item {
+        padding: 0;
+
+        &>* {
+          margin: 1px 0;
+        }
+      }
+
+      .button {
+        padding-left: 1rem;
+        padding-right: 1rem;
+        border-radius: 5px;
+
+        span {
+          line-height: 1.25rem !important;
+          height: 1.25rem !important;
+        }
+
+        span+span i {
+          color: var(--casa-text-icon);
+        }
+
+        &.is-text {
+          text-decoration: none;
+          justify-content: flex-start;
+          outline: none;
+          transition: all 0.2s;
+          border: none !important;
+          height: 2rem;
+          font-size: 0.875rem;
+          color: var(--casa-text);
+
+          &.running {
+            color: #779e2a !important;
+          }
+
+          &.exited {
+            color: #ff1616 !important;
+          }
+        }
+
+        &.has-text-red {
+          &:hover {
+            background: var(--casa-danger-tint);
+          }
+
+          &:active {
+            background: var(--casa-danger-tint-strong);
+          }
+        }
+
+        &:focus {
+          background: none;
+          box-shadow: none;
+          outline: none;
+        }
+
+        &:hover {
+          background-color: var(--casa-hover);
+        }
+
+        &:active {
+          /* Gary/200 */
+          background-color: var(--casa-active);
+        }
+      }
+
+      .gap {
+        margin-left: -4px;
+        margin-right: -4px;
+      }
+
+      ._b-bor {
+        border-top: var(--casa-border-faint) 1px solid;
+
+        .is-text {
+          text-decoration: none;
+          justify-content: center !important;
+        }
+
+        .column {
+          margin-bottom: -4px;
+
+          .button {
+            margin: 4px;
+            height: 2rem;
+          }
+        }
+
+        .column:first-child {
+          border-right: var(--casa-border-faint) 1px solid;
+        }
+      }
+
+      /*common*/
+      .loading-overlay {
+        &.is-active {
+          background: var(--casa-hover) !important;
+          justify-content: flex-start;
+        }
+
+        .loading-background {
+          background: none;
+        }
+      }
+
+      .is-24x24 {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+
+    }
+  }
+}
+
+.in-card.b-tooltip {
+  &.is-top .tooltip-content {
+    bottom: auto;
+    top: -15%;
+  }
+
+  .tooltip-content {
+    box-shadow: none;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-family: $family-sans-serif;
+    font-style: normal;
+    line-height: 1.25rem;
+    font-feature-settings: 'pnum' on, 'lnum' on;
+
+    color: hsla(208, 20%, 20%, 1);
+
+  }
+
+}
+
+.__position {
+  position: absolute !important;
+  top: -0.75rem !important;
+  left: 3rem !important;
+  z-index: 30;
+}
+
+// `NEW` is three characters and sits beside the icon; a whole word has to start
+// further left or it runs past the card.
+.__position-wide {
+  left: 1.25rem !important;
+}
+
+// 0.4.4
+.dropdown.is-right .dropdown-menu {
+  top: 0;
+  left: calc(100% + 6px);
+}
+
+.system-marker {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--casa-surface);
+  color: var(--casa-text);
+  opacity: 0.9;
+}
+
+.stats-badge {
+  position: absolute;
+  top: -0.375rem;
+  right: -0.5rem;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 0.625rem;
+  background: #d80000;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.dropdown.is-left .dropdown-menu {
+  top: 0;
+  left: calc(-100% - 14px);
+}
+
+// the title and, when the app has a backup schedule, its badge
+.app-card .title-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+
+	> a {
+		min-width: 0;
+	}
+}
+
+// beta dashboard: a row, not a square
+.app-card.is-compact {
+  // the proposal's chip: the accent of the beta dashboard, over the card's top right corner
+  .update-chip {
+    position: absolute;
+    top: -0.5rem;
+    right: 0.75rem;
+    z-index: 30;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 0.5rem;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1rem;
+    pointer-events: none;
+  }
+
+  aspect-ratio: auto;
+  cursor: pointer;
+  justify-content: flex-start;
+  min-height: 4.5rem;
+
+  .cards-content,
+  .in-card.b-tooltip,
+  .in-card .tooltip-trigger {
+    display: block;
+    width: 100%;
+  }
+
+  .img-c {
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: flex-start !important;
+    padding: 0.75rem 2rem 0.75rem 0.875rem !important;
+    text-align: left;
+    gap: 0.75rem;
+
+    > .is-flex {
+      flex-shrink: 0;
+    }
+  }
+
+  .image.is-64x64,
+  .is-64x64 {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .app-text {
+    min-width: 0;
+    // here and not on .img-c, whose has-text-centered is !important: a short second line stays under the start of the name
+    text-align: left;
+
+    p {
+      margin: 0 !important;
+    }
+
+    // the compact card's text is left-aligned, and so is the title with its badge
+    .title-row {
+      justify-content: flex-start;
+    }
+  }
+
+  .action-btn {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .system-marker {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .app-state {
+    font-size: 0.75rem;
+    opacity: 0.85;
+  }
+
+  .state-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.25rem;
+    border-radius: 50%;
+
+    &.is-running {
+      background: #8fd16a;
+    }
+
+    &.is-stopped {
+      background: #9aa4ad;
+    }
+
+    &.is-unhealthy {
+      background: #ff5c5c;
+    }
+
+    &.is-starting {
+      background: #ffb648;
+    }
+  }
+}
+</style>
+
+<style lang="scss">
+.dialog {
+  .modal-card-head {
+    padding-left: 1.5rem;
+    padding-top: 1.5rem;
+    padding-bottom: 0.75rem;
+    border: 1px solid var(--casa-border-faint);
+  }
+
+  .modal-card-body {
+    padding: 1rem 1.5rem 1.5rem;
+
+    #checkDelConfig {
+      margin-right: 0.5rem;
+      height: 1.25rem;
+      width: 1.25rem;
+    }
+
+    border: 1px solid var(--casa-border-faint);
+  }
+
+  .modal-card-foot {
+    padding-top: 0.75rem;
+    padding-bottom: 1.5rem;
+    padding-right: 1.5rem;
+
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 20px;
+    letter-spacing: 0;
+    text-align: left;
+
+    .button {
+      margin-right: 0;
+    }
+
+    .is-dark {
+      margin-left: 1rem;
+      background: hsla(208, 100%, 45%, 1);
+    }
+  }
+}
+</style>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex">
+	<meta name="theme-color" content="#ffffff">
+	<title>ReCasaOS</title>
+	<script>
+		try {
+			const theme = localStorage.getItem('theme')
+			if (theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) {
+				document.documentElement.dataset.theme = 'dark'
+				document.querySelector('meta[name=theme-color]').content = '#1f2023'
+			}
+		} catch {}
+	</script>
+	<style>
+		html[data-theme=dark] { background: #1f2023; color-scheme: dark; }
+	</style>
+</head>
+<body>
+	<noscript>Enable JavaScript to use Files.</noscript>
+	<div id="app" style="height: 100dvh"></div>
+</body>
+</html>

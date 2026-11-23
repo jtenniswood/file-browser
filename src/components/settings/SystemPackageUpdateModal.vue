@@ -1,0 +1,1276 @@
+<template>
+	<div class="modal-card system-package-update-modal touch-targets">
+		<header class="modal-card-head">
+			<div class="is-flex-grow-1">
+				<h3 class="title is-header">{{ $t('System packages') }}</h3>
+			</div>
+			<b-icon class="close-button" icon="close-outline" pack="casa" @click="$emit('close')" />
+		</header>
+
+		<section class="modal-card-body">
+			<!-- the one place a screen reader hears of the Docker update: always there, so a change in it is announced -->
+			<div class="docker-announcer is-sr-only" role="status" aria-live="polite" aria-atomic="true">{{ dockerAnnouncement }}</div>
+
+			<b-message v-if="error" class="mb-3" size="is-small" type="is-danger">
+				{{ error.message }}
+				<span v-if="error.detail" class="is-block is-size-7 mt-1">{{ error.detail }}</span>
+			</b-message>
+
+			<!-- a refused Docker update: the sentence comes from the code; the core's own words (English) only where they say what the sentence cannot -->
+			<b-message v-if="dockerRefusal" class="mb-3" size="is-small" type="is-warning">
+				{{ dockerRefusalText(dockerRefusal.code, dockerRefusal.names) }}
+				<span v-if="dockerRefusal.reason && dockerShowsReason" class="is-block is-size-7 mt-1">{{ dockerRefusal.reason }}</span>
+			</b-message>
+
+			<!-- every value below is a text node: container names are third-party strings, never HTML -->
+			<div v-if="dockerConfirming" class="docker-confirm">
+				<h4 ref="dockerConfirmTitle" class="docker-title" tabindex="-1">{{ $t('Update Docker') }}</h4>
+				<p class="mt-1">{{ dockerPlanLine }}</p>
+
+				<b-message v-if="dockerPlan.major_jump" class="docker-major mt-3" size="is-small" type="is-danger">
+					{{ $t('This is a new major version of Docker, from {from} to {to}. Apps that talk to Docker directly may need an update of their own, and not every setup has been tested with it.', { from: dockerPlan.from, to: dockerPlan.to }) }}
+					<span class="docker-major-back is-block mt-2">{{ $t('Going back to the previous major version is not supported: in a test the containers did not start again.') }}</span>
+					<span v-if="dockerSocketContainers.length" class="docker-socket is-block mt-2">{{ $t('These containers talk to Docker directly and may need their own update: {names}.', { names: dockerSocketContainers.join(', ') }) }}</span>
+				</b-message>
+				<b-message v-if="dockerPlanRestarts" class="mt-3" size="is-small" type="is-warning">
+					{{ $t('Updating Docker restarts it: every container stops until it is back. Apps set to restart start again by themselves, the others stay stopped. Do it when that suits you.') }}
+				</b-message>
+
+				<!-- A hold is crossed only on the person's word: the confirm button waits for the box. Both come before the tables, so that a
+					small window shows them without scrolling past the lists. The notice is the box's description. -->
+				<template v-if="dockerPlanHeld">
+					<b-message class="docker-held-notice mt-3" size="is-small" type="is-warning">
+						<span id="docker-held-notice-text">{{ $t('Docker\'s packages are on hold ({names}). This update goes ahead anyway, as the terminal command with --allow-change-held-packages would. That command drops the hold on the packages it updates: ReCasaOS puts it back when the update has ended, and tells you whether it did.', { names: dockerPlanHeldNames.join(', ') }) }}</span>
+					</b-message>
+					<label class="docker-held-confirm checkbox is-flex is-align-items-flex-start mt-2 is-size-7">
+						<input v-model="dockerHeldConfirmed" aria-describedby="docker-held-notice-text" aria-required="true" class="mr-2 mt-1" type="checkbox">
+						<span>{{ $t('I know the packages are on hold and I want to update anyway') }}</span>
+					</label>
+				</template>
+
+				<div class="docker-packages package-list mt-3">
+					<table class="table is-fullwidth is-hoverable">
+						<thead>
+							<tr>
+								<th>{{ $t('Name') }}</th>
+								<th>{{ $t('Current version') }}</th>
+								<th>{{ $t('New version') }}</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="item in dockerPlan.packages" :key="item.name">
+								<td>{{ item.name }}</td>
+								<td>
+									<b-tag v-if="item.new === true" class="docker-new-package" type="is-info">{{ $t('New package') }}</b-tag>
+									<template v-else>{{ item.current_version || '—' }}</template>
+								</td>
+								<td>{{ item.candidate_version }}</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<p v-if="dockerNewPackages.length" class="docker-new-packages mt-2 is-size-7">
+					{{ $t(dockerNewPackages.length === 1 ? 'This Docker version also needs a package that is not installed yet: {names}.' : 'This Docker version also needs these packages that are not installed yet: {names}.', { names: dockerNewPackages.join(', ') }) }}
+				</p>
+
+				<!-- a plan that leaves Docker running (a plugin alone) stops nothing: there is nothing to list -->
+				<template v-if="dockerPlanRestarts">
+					<h5 class="docker-subtitle mt-4">{{ $t('Running containers') }}</h5>
+					<div v-if="dockerContainers.loading" class="docker-containers-loading is-flex is-align-items-center _has-text-gray is-size-7">
+						<b-icon class="mr-2" custom-class="mdi-spin" icon="loading" size="is-small" />
+						<span>{{ $t('Listing the running containers...') }}</span>
+					</div>
+					<p v-else-if="dockerContainers.failed" class="is-size-7">
+						{{ $t('The running containers could not be listed. You can still update.') }}
+					</p>
+					<p v-else-if="dockerContainers.list.length === 0" class="is-size-7">
+						{{ $t('No container is running.') }}
+					</p>
+					<template v-else>
+						<p v-if="dockerWontReturn.length" class="docker-wont-return-count is-size-7 has-text-warning-on-scheme">
+							{{ dockerWontReturn.length === 1 ? $t('One running container will not start again by itself.') : $t('{n} running containers will not start again by themselves.', { n: dockerWontReturn.length }) }}
+						</p>
+						<p v-if="dockerMayNotReturn.length" class="docker-may-not-return-count is-size-7 has-text-warning-on-scheme">
+							{{ dockerMayNotReturn.length === 1 ? $t('One running container restarts only when it fails, so it may stay stopped.') : $t('{n} running containers restart only when they fail, so they may stay stopped.', { n: dockerMayNotReturn.length }) }}
+						</p>
+						<p v-if="dockerExposed.length" class="docker-exposed mt-1 is-size-7 has-text-warning-on-scheme">
+							{{ $t('Containers that publish port 53, 80 or 443, or use the host network: {names}. That may be this machine\'s DNS or web server, and it will be down while Docker restarts.', { names: dockerExposed.map(item => item.name).join(', ') }) }}
+						</p>
+						<div class="docker-containers package-list mt-2">
+							<table class="table is-fullwidth is-hoverable">
+								<thead>
+									<tr>
+										<th>{{ $t('Container') }}</th>
+										<th>{{ $t('Restart Policy') }}</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="item in dockerContainerRows" :key="item.name" :class="{ 'docker-wont-return': neverRestarts(item.restart_policy), 'docker-may-not-return': restartsOnFailure(item.restart_policy) }">
+										<td>{{ item.name }}</td>
+										<td>
+											{{ item.restart_policy || 'no' }}
+											<span v-if="neverRestarts(item.restart_policy)" class="is-block">{{ $t('Stays stopped') }}</span>
+											<span v-else-if="restartsOnFailure(item.restart_policy)" class="is-block">{{ $t('May stay stopped') }}</span>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</template>
+				</template>
+			</div>
+
+			<template v-else>
+				<div v-if="dockerShowsJob" class="docker-job mb-4">
+					<h4 ref="dockerJobTitle" class="docker-title" tabindex="-1">{{ $t('Docker update') }}</h4>
+
+					<template v-if="dockerRunning">
+						<p class="has-text-info-on-scheme">{{ dockerRunningText }}</p>
+						<p v-if="dockerVersions" class="docker-versions is-size-7 _has-text-gray">{{ dockerVersions }}</p>
+						<p v-if="dockerUnknown" class="docker-unknown mt-1 is-size-7 has-text-danger-on-scheme">{{ $t('Status unknown, reopen this window.') }}</p>
+						<p v-else-if="dockerLost" class="docker-lost mt-1 is-size-7 has-text-warning-on-scheme">{{ $t('Connection lost, retrying...') }}</p>
+					</template>
+
+					<template v-else>
+						<!-- the last result stays until the next run, so it can be old: the date comes first -->
+						<p v-if="dockerFinishedAt" class="docker-finished is-size-7 _has-text-gray">{{ $t('Finished {date}', { date: dockerFinishedAt }) }}</p>
+
+						<template v-if="dockerRestartPending">
+							<p class="has-text-warning-on-scheme">{{ $t('Docker is updated, but the old version is still running. Restart it to finish the update.') }}</p>
+							<p class="mt-1 is-size-7">{{ $t('Restarting Docker stops every container until it is back.') }}</p>
+							<p class="mt-1 is-size-7">{{ $t('If you have restarted Docker since, there is nothing left to do.') }}</p>
+							<p class="mt-2 is-size-7">{{ $t('In a terminal on this machine:') }}</p>
+							<pre class="docker-command" tabindex="0" :aria-label="$t('Command to restart Docker')">{{ restartCommand }}</pre>
+						</template>
+						<p v-else-if="dockerStatus.state === 'succeeded'" class="has-text-success-on-scheme">{{ dockerSuccessText }}</p>
+						<template v-else-if="dockerStatus.state === 'failed'">
+							<p class="has-text-danger-on-scheme">{{ $t('The Docker update failed.') }}</p>
+							<p v-if="dockerFailureText" class="mt-1 is-size-7">{{ dockerFailureText }}</p>
+							<p v-else-if="dockerStatus.error" class="mt-1 is-size-7 _has-text-gray">{{ dockerStatus.error }}</p>
+							<template v-if="dockerHalfInstalled">
+								<p class="mt-2 is-size-7">{{ $t('A half-finished install must be completed first. In a terminal on this machine:') }}</p>
+								<pre class="docker-command" tabindex="0" :aria-label="$t('Command to finish a half-finished install')">{{ repairCommand }}</pre>
+							</template>
+							<template v-if="dockerMajorJump">
+								<p v-if="dockerNoWayBack" class="docker-no-way-back mt-2 is-size-7">{{ dockerNoWayBack }}</p>
+							</template>
+							<template v-else-if="dockerStatus.rollback_command && !dockerNothingChanged">
+								<p class="mt-2 is-size-7">{{ $t('To put the previous version back, run this in a terminal on this machine.') }}</p>
+								<pre class="docker-command" tabindex="0" :aria-label="$t('Command to put the previous Docker version back')">{{ dockerStatus.rollback_command }}</pre>
+								<p class="mt-1 is-size-7 _has-text-gray">{{ $t('This has not been tested after a major version change.') }}</p>
+								<p class="mt-1 is-size-7 _has-text-gray">{{ $t('If Docker works again since, you do not need this.') }}</p>
+							</template>
+						</template>
+
+						<p v-if="dockerHoldText" class="docker-hold-result mt-2 is-size-7">{{ dockerHoldText }}</p>
+
+						<div v-if="dockerNotReturned.length" class="docker-not-returned mt-3">
+							<p class="is-size-7 has-text-warning-on-scheme">
+								{{ dockerNotReturnedText }}
+							</p>
+							<div class="package-list mt-2">
+								<table class="table is-fullwidth is-hoverable">
+									<thead>
+										<tr>
+											<th>{{ $t('Container') }}</th>
+											<th>{{ $t('Restart Policy') }}</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr v-for="item in dockerNotReturned" :key="item.name">
+											<td>{{ item.name }}</td>
+											<td>{{ item.restart_policy || 'no' }}</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+							<p v-if="dockerNotReturned.some(item => neverRestarts(item.restart_policy))" class="mt-2 is-size-7">
+								{{ $t('A container with no restart policy never starts again by itself: start it from the dashboard.') }}
+							</p>
+							<p v-if="dockerNotReturned.some(item => restartsOnFailure(item.restart_policy))" class="mt-2 is-size-7">
+								{{ $t('A container that restarts only when it fails may stay stopped: start it from the dashboard.') }}
+							</p>
+							<p v-if="dockerNotReturned.some(item => restartsByItself(item.restart_policy))" class="mt-2 is-size-7">
+								{{ $t('A container with a restart policy was not running yet when the update ended. Give it a moment, then check it from the dashboard.') }}
+							</p>
+						</div>
+					</template>
+
+					<div v-if="dockerShowsLog" class="package-log mt-3">
+						<pre>{{ dockerStatus.log }}</pre>
+					</div>
+
+					<b-button v-if="dockerTerminal" class="mt-3" rounded size="is-small" @click="dismissDockerResult">
+						{{ $t('Dismiss') }}
+					</b-button>
+				</div>
+
+				<div v-if="isChecking" class="package-loading is-flex is-align-items-center is-justify-content-center _has-text-gray">
+					<b-icon class="mr-2" custom-class="mdi-spin" custom-size="is-size-5" icon="loading" size="is-20" />
+					<span>{{ $t('Checking for system package updates...') }}</span>
+				</div>
+
+				<div v-if="!isChecking && info.supported === false" class="package-empty">
+					<p>{{ $t('System package updates are not supported on this host.') }}</p>
+					<p v-if="info.reason" class="is-size-7 _has-text-gray mt-1">{{ info.reason }}</p>
+				</div>
+
+				<template v-if="!isChecking && info.supported !== false">
+					<b-message v-if="status.reboot_required" class="mb-3" size="is-small" type="is-warning">
+						{{ $t('A reboot is required to finish applying these updates. Use the existing Restart action when convenient.') }}
+					</b-message>
+
+					<div v-if="info.count === 0 && !isRunning && !dockerRunning && status.state === 'idle' && !error" class="package-empty">
+						{{ $t(dockerHasUpdates ? 'No other system package updates are available.' : 'No system package updates are available.') }}
+					</div>
+
+					<div v-else-if="info.count > 0" class="package-summary">
+						<p class="mb-3">
+							<strong>{{ info.count }}</strong> {{ $t('updates available') }}
+						</p>
+						<div class="package-list">
+							<table class="table is-fullwidth is-hoverable">
+								<thead>
+									<tr>
+										<th>{{ $t('Name') }}</th>
+										<th>{{ $t('Current version') }}</th>
+										<th>{{ $t('New version') }}</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="item in info.updates" :key="item.name">
+										<td>{{ item.name }}</td>
+										<td>{{ item.current_version || '—' }}</td>
+										<td>{{ item.candidate_version }}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+
+					<div v-if="info.docker" class="docker-line mt-4">
+						<h4 class="docker-title">
+							{{ $t('Docker') }}
+							<span v-if="info.docker.version" class="ml-1 _has-text-gray">{{ info.docker.version }}</span>
+						</h4>
+						<p class="is-size-7 _has-text-gray">{{ dockerOrigin }}</p>
+						<template v-if="dockerHasUpdates">
+							<p class="mt-2 is-size-7">{{ $t('Docker has updates. This update leaves it alone.') }}</p>
+							<ul class="docker-updates is-size-7 _has-text-gray">
+								<li v-for="item in info.docker.updates" :key="item.name">
+									{{ item.name }} {{ item.current_version || '—' }} → {{ item.candidate_version }}
+								</li>
+							</ul>
+							<p v-if="info.docker.restarts_docker" class="mt-2 is-size-7">
+								{{ $t('Updating Docker restarts it: every container stops until it is back. Apps set to restart start again by themselves, the others stay stopped. Do it when that suits you.') }}
+							</p>
+						</template>
+						<p v-else-if="info.docker.candidate" class="mt-2 is-size-7">{{ dockerBehind }}</p>
+						<p v-else-if="dockerCanSeeUpdates" class="is-size-7">{{ $t('No newer Docker is offered by this machine\'s package sources.') }}</p>
+						<p v-else class="is-size-7">{{ dockerUnseen }}</p>
+						<template v-if="!dockerRunning">
+							<p v-if="dockerHeld" class="docker-held mt-2 is-size-7">{{ $t('The Docker packages are on hold ({names}). The Update Docker button updates them anyway, once you confirm, and puts the hold back afterwards.', { names: dockerHeldNames.join(', ') }) }}</p>
+							<b-button v-if="dockerUpdate && dockerUpdate.available" ref="dockerUpdateButton" class="docker-update-button mt-2" :disabled="isRunning" rounded size="is-small" type="is-primary" @click="openDockerConfirm">
+								{{ $t('Update Docker') }}
+							</b-button>
+							<!-- not again when the message above says the very same thing -->
+							<p v-else-if="dockerUpdate && dockerUpdate.refusal && dockerUpdate.refusal !== dockerRefusal?.code" class="docker-refusal mt-2 is-size-7">
+								{{ dockerRefusalText(dockerUpdate.refusal, dockerUpdate.refusal_detail) }}
+							</p>
+							<template v-if="dockerNeedsRepair">
+								<p class="mt-2 is-size-7">{{ $t('A half-finished install must be completed first. In a terminal on this machine:') }}</p>
+								<pre class="docker-command" tabindex="0" :aria-label="$t('Command to finish a half-finished install')">{{ repairCommand }}</pre>
+							</template>
+						</template>
+						<template v-if="!dockerRunning && info.docker.manual_command && (dockerHasUpdates || info.docker.candidate || !dockerCanSeeUpdates)">
+							<p class="mt-2 is-size-7">{{ $t('In a terminal on this machine:') }}</p>
+							<pre class="docker-command" tabindex="0" :aria-label="$t('Command to update Docker')">{{ info.docker.manual_command }}</pre>
+						</template>
+						<p v-else-if="dockerHasUpdates && !dockerRunning" class="mt-2 is-size-7">{{ $t('ReCasaOS does not know how Docker was installed here, so it shows no command.') }}</p>
+					</div>
+
+					<div v-if="isRunning" class="mt-4">
+						<p class="has-text-info-on-scheme">
+							{{ $t(isReconciliationPending ? 'Finishing system package update...' : 'Applying system package updates...') }}
+						</p>
+					</div>
+					<div v-else-if="status.state === 'succeeded'" class="mt-4 has-text-success-on-scheme">
+						{{ $t('System package update completed.') }}
+					</div>
+					<div v-else-if="status.state === 'failed'" class="mt-4 has-text-danger-on-scheme">
+						{{ $t('System package update failed.') }}
+					</div>
+					<p v-if="systemFinishedAt && !runWatched && !isRunning" class="system-finished is-size-7 _has-text-gray">{{ $t('Finished {date}', { date: systemFinishedAt }) }}</p>
+					<p v-if="status.error && !isReconciliationPending && status.error !== error?.detail" class="mt-1 is-size-7 _has-text-gray">
+						{{ status.error }}
+					</p>
+
+					<div v-if="status.log" class="package-log mt-4">
+						<pre>{{ status.log }}</pre>
+					</div>
+				</template>
+			</template>
+		</section>
+
+		<footer v-if="dockerConfirming" class="docker-confirm-foot modal-card-foot is-justify-content-flex-end">
+			<p v-if="dockerAwaitsBox" id="docker-held-reason" class="docker-held-reason is-size-7">{{ $t('Tick the box above to continue.') }}</p>
+			<b-button :disabled="dockerStarting" rounded @click="closeDockerConfirm">
+				{{ $t('Cancel') }}
+			</b-button>
+			<b-button class="docker-confirm-button" :aria-describedby="dockerAwaitsBox ? 'docker-held-reason' : null" :disabled="dockerContainers.loading || dockerAwaitsBox" :loading="dockerStarting" rounded type="is-primary" @click="startDockerUpdate">
+				{{ $t(dockerPlanMoves ? 'Update Docker to {version}' : 'Update Docker packages', { version: dockerPlan.to }) }}
+			</b-button>
+		</footer>
+		<!-- empty while apt runs or on a host without it: × and Escape still close -->
+		<footer v-else-if="!isRunning && !dockerRunning && info.supported !== false" class="modal-card-foot is-justify-content-flex-end">
+			<b-button :loading="isChecking" rounded @click="checkPackages">
+				{{ $t('Check for updates') }}
+			</b-button>
+			<b-button v-if="hasUpdates && !(status.state === 'succeeded' && runWatched)" rounded type="is-primary" @click="confirmUpdate">
+				{{ $t('Update packages') }}
+			</b-button>
+		</footer>
+	</div>
+</template>
+
+<script>
+const DOCKER_POLL_MS = 2000
+// the status route has not answered for this long: it is called unknown, not "still running"
+const DOCKER_LOST_MS = 10 * 60 * 1000
+// host ports a box's DNS and web server sit on
+const DOCKER_HOST_PORTS = [53, 80, 443]
+const DOCKER_RESTART_COMMAND = 'sudo systemctl restart docker'
+// the packages whose update restarts the daemon (the others, the plugins and the client, do not)
+const DOCKER_RESTARTING_PACKAGES = ['docker-ce', 'containerd.io']
+// what apt asks for, before anything else, when dpkg was stopped in the middle of an install
+const DOCKER_REPAIR_COMMAND = 'sudo dpkg --configure -a && sudo apt-get -f install'
+
+// What a refusal means, by the code the core sends (never by its English words). The ones that
+// follow the static codes of `docker.update.refusal` come back from the start as well, as a 409.
+const DOCKER_REFUSALS = {
+	unsupported: 'This machine cannot update Docker from here.',
+	origin: 'ReCasaOS only updates a Docker installed from Docker\'s own repository, and this one was not.',
+	// only for a core that cannot confirm a hold: one that can offers the update on it (see startDockerUpdate)
+	held: 'The Docker packages are on hold, and a hold is deliberate: ReCasaOS does not override it. To update anyway, use the command below.',
+	// the code of a `held` that a core which knows holds answers for a plan confirmed without them (see startDockerUpdate)
+	held_now: 'The Docker packages were put on hold since this window last checked, so the update did not start. It can still go ahead if you confirm it: press Update Docker again.',
+	// the code of a `held` that nothing else answers for: the new check offers no update on a hold and refuses nothing (see startDockerUpdate)
+	held_not_started: 'The update did not start: Docker\'s packages are on hold.',
+	dpkg: 'A previous package operation was left unfinished on this machine. Finish it first, then check again.',
+	daemon: 'ReCasaOS cannot reach Docker right now, so it will not update it. Check that Docker is running.',
+	swarm: 'This machine is part of a Docker swarm, which ReCasaOS does not update.',
+	plan: 'The update would go beyond Docker\'s own packages and the few new ones they need, or could not be planned, so ReCasaOS will not run it.',
+	disk: 'There is less than 1 GiB of free disk space where the update needs it, so ReCasaOS will not start it. Free some space and check again.',
+	running: 'An update is already running on this machine.',
+	maintenance: 'Another update or package operation is running on this machine. Try again when it is done.',
+	apps: 'Some apps are busy right now, or ReCasaOS could not check. Try again in a few minutes.',
+	// the plan's id covers the hold: a hold set or lifted since the window looked changes the offer as much as a newer Docker does
+	changed: 'The Docker update on offer has changed since this window was opened (a newer Docker, or a hold set or lifted). Look at it again and confirm again.',
+	nothing: 'Docker has nothing to update.',
+	start: 'The update could not be started, so nothing was changed.',
+}
+// The core's reason is English. It is shown under the sentence of a code only where it says what the
+// sentence cannot (this host lacks apt-get; which unit is running), and for a code with no sentence.
+const DOCKER_REASON_CODES = ['unsupported', 'maintenance']
+const DOCKER_REFUSAL_NAMES = {
+	plan: 'Blocked by: {names}.',
+	apps: 'Busy apps: {names}.',
+}
+const DOCKER_FAILURES = {
+	start: 'The update could not be started, so nothing was changed.',
+	guard: 'The last check before the update failed, so nothing was changed.',
+	plan: 'The update would have gone beyond Docker\'s own packages and the few new ones they need, so it was stopped before anything changed.',
+	download: 'The new packages could not be downloaded, so nothing was changed. Check the internet connection and the free disk space, then try again.',
+	install: 'The new packages could not be installed. Docker may be half updated: read the log below.',
+	daemon: 'The new packages were installed, but Docker did not start again, so every container is stopped. Read the log below.',
+	no_result: 'The update stopped without reporting a result. Read the log below and check Docker before trying again.',
+}
+// where a run is, by the phase the core names (never by the core's English words)
+const DOCKER_PHASES = {
+	preparing: 'Preparing the Docker update... your apps keep running.',
+	downloading: 'Downloading Docker... your apps keep running.',
+	installing: 'Installing Docker... apps restart briefly.',
+	waiting_docker: 'Waiting for Docker to come back...',
+	waiting_containers: 'Waiting for your apps to come back...',
+}
+// what a run says before it installs is true of any plan: the apps keep running
+const DOCKER_PHASES_BEFORE_INSTALL = ['preparing', 'downloading']
+// a failure that stops before the install changed nothing, and a way back would mean nothing
+const DOCKER_NOTHING_CHANGED = ['start', 'guard', 'plan', 'download']
+// dpkg may have been stopped in the middle of the install: apt refuses to do anything else until it is finished
+const DOCKER_HALF_INSTALLED = ['install', 'no_result']
+// refused for a while, not for what is on screen: a new check (apt-get update) would answer nothing
+const DOCKER_TRANSIENT = ['maintenance', 'apps']
+
+function pick(table, code) {
+	return Object.prototype.hasOwnProperty.call(table, code) ? table[code] : ''
+}
+
+function cleanNames(list) {
+	return Array.isArray(list) ? list.filter(name => typeof name === 'string' && name).slice(0, 20) : []
+}
+
+function emptyInfo() {
+	return {
+		supported: null,
+		manager: '',
+		reason: '',
+		updates: [],
+		count: 0,
+	}
+}
+
+function emptyStatus() {
+	return {
+		supported: null,
+		manager: '',
+		state: 'idle',
+		log: '',
+		error: '',
+		reboot_required: false,
+	}
+}
+
+function emptyDockerStatus() {
+	return {
+		supported: null,
+		state: 'idle',
+		outcome: '',
+		error: '',
+		error_code: '',
+		exit_code: null,
+		started_at: '',
+		completed_at: '',
+		from: '',
+		to: '',
+		major_jump: false,
+		// the run went ahead of a hold, which the update drops and the core puts back; it says at the end whether it is in place again
+		held: false,
+		holds_kept: false,
+		not_returned: [],
+		rollback_command: '',
+		log: '',
+		// Not the core's: whether the plan confirmed in this window restarts Docker. It lives with the status
+		// it describes, so a status read later (a run found when the window opens) does not inherit it. null: not known.
+		plan_restarts: null,
+	}
+}
+
+function emptyContainers() {
+	return { loading: false, failed: false, list: [] }
+}
+
+// no policy and "no" are the same thing: Docker does not start the container again
+function neverRestarts(policy) {
+	return !policy || policy === 'no'
+}
+
+// Docker starts such a container after a restart of the daemon only if it had failed: one that stops
+// cleanly when Docker stops it (nginx, a shell with a trap) stays stopped
+function restartsOnFailure(policy) {
+	return policy === 'on-failure'
+}
+
+function restartsByItself(policy) {
+	return !neverRestarts(policy) && !restartsOnFailure(policy)
+}
+
+export default {
+	name: 'SystemPackageUpdateModal',
+	data() {
+		return {
+			info: emptyInfo(),
+			status: emptyStatus(),
+			isChecking: false,
+			isStarting: false,
+			error: null,
+			pollTimer: null,
+			// The Docker update has a state of its own: the generic one above is never shared with it.
+			dockerStatus: emptyDockerStatus(),
+			dockerPlan: null,
+			// what the person confirmed, kept while that run goes on: the core says `to` only at the end
+			dockerRunPlan: null,
+			dockerConfirming: false,
+			dockerStarting: false,
+			// the end of a run was seen by this window, as opposed to a result that was there when it opened
+			dockerWatched: false,
+			// the same for the system update: a result found when the window opened is old, and the list of updates was read after it
+			runWatched: false,
+			// a start whose answer was lost: the core is being asked whether it went through
+			dockerChecking: false,
+			dockerRefusal: null,
+			dockerContainers: emptyContainers(),
+			dockerContainersSeq: 0,
+			// the box of the confirmation: a hold is crossed only once it is ticked, and it starts empty every time the view opens
+			dockerHeldConfirmed: false,
+			dockerPollTimer: null,
+			dockerPollActive: false,
+			dockerPollBusy: false,
+			dockerLost: false,
+			dockerLostSince: 0,
+			dockerUnknown: false,
+			// a read of the Docker update's state has worked at least once
+			dockerStatusRead: false,
+			// set when the window is closed: an answer that comes after must not start anything
+			gone: false,
+		}
+	},
+	computed: {
+		isRunning() {
+			return this.isStarting || this.status.state === 'running' || this.isReconciliationPending
+		},
+		isReconciliationPending() {
+			return this.status.state === 'finalizing' || (
+				this.status.state === 'failed'
+				&& this.status.error === 'The package update stopped before it reported a result.'
+				&& !this.status.exit_code
+				&& !this.status.completed_at
+			)
+		},
+		hasUpdates() {
+			return Array.isArray(this.info.updates) && this.info.updates.length > 0
+		},
+		systemFinishedAt() {
+			const at = this.status.completed_at
+			const date = at ? new Date(at) : null
+			return date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : ''
+		},
+		dockerHasUpdates() {
+			return Array.isArray(this.info.docker?.updates) && this.info.docker.updates.length > 0
+		},
+		// apt tells of an update for Docker's own repository and for the distribution's package;
+		// of a snap, or of a Docker whose source it does not know, it tells nothing, and "up to
+		// date" would be a claim nobody checked
+		dockerCanSeeUpdates() {
+			return ['docker-repository', 'distribution'].includes(this.info.docker?.origin)
+		},
+		dockerOrigin() {
+			const docker = this.info.docker
+			if (!docker?.installed) {
+				return this.$t('Docker is not installed from a package here.')
+			}
+			const words = {
+				'docker-repository': 'Installed from Docker\'s own repository.',
+				'distribution': 'Installed from your distribution\'s docker.io package.',
+				'snap': 'Installed as a snap.',
+			}
+			return this.$t(words[docker.origin] || 'Installed from a source ReCasaOS does not recognise.')
+		},
+		// a newer engine exists in the package sources and the update does not offer it
+		dockerBehind() {
+			const version = this.info.docker?.candidate
+			// the button below does what the system update does not: the sentence must not say nobody can
+			if (this.dockerUpdate?.available) {
+				return this.$t('A newer Docker, {version}, exists in this machine\'s package sources. The system update does not install it, but Update Docker below does.', { version })
+			}
+			return this.$t(this.info.docker?.held
+				? 'A newer Docker, {version}, exists in this machine\'s package sources, but the package is on hold, so no update offers it.'
+				: 'A newer Docker, {version}, exists in this machine\'s package sources, but apt does not offer it for an update (a hold, or a dependency).', { version })
+		},
+		dockerUnseen() {
+			return this.$t(this.info.docker?.origin === 'snap'
+				? 'ReCasaOS cannot see updates of a snap. Update it with the command below.'
+				: 'This machine\'s package sources offer no update for it, and ReCasaOS cannot tell more.')
+		},
+		// what the packages check says of updating Docker from here; absent on a core without the button
+		dockerUpdate() {
+			return this.info.docker?.update || null
+		},
+		// The update is offered although Docker's packages are on hold: it goes ahead on the person's word, as the terminal command
+		// does, which drops the hold of the packages it updates. The core puts it back, and says whether it did (holds_kept).
+		// Only a true is believed: a core that does not know holds says nothing, and a string is not a yes.
+		dockerHeld() {
+			return !!this.dockerUpdate?.available && this.dockerUpdate.held === true
+		},
+		dockerHeldNames() {
+			return cleanNames(this.dockerUpdate?.held_packages)
+		},
+		// the same, for the plan on screen in the confirmation: the one the person confirms, not the one a later check found
+		dockerPlanHeld() {
+			return this.dockerPlan?.held === true
+		},
+		dockerPlanHeldNames() {
+			return cleanNames(this.dockerPlan?.held_packages)
+		},
+		// a held plan whose box is still empty: the confirm button waits, and says why
+		dockerAwaitsBox() {
+			return this.dockerPlanHeld && !this.dockerHeldConfirmed
+		},
+		// dpkg was stopped in the middle of something: apt refuses to do anything else until it is finished
+		dockerNeedsRepair() {
+			return this.dockerUpdate?.refusal === 'dpkg'
+		},
+		dockerRunning() {
+			return this.dockerStarting || this.dockerStatus.state === 'running' || this.dockerStatus.state === 'finalizing'
+		},
+		dockerFinalizing() {
+			return this.dockerStatus.state === 'finalizing'
+		},
+		dockerTerminal() {
+			return this.dockerStatus.state === 'succeeded' || this.dockerStatus.state === 'failed'
+		},
+		dockerRestartPending() {
+			return this.dockerStatus.state === 'succeeded' && this.dockerStatus.outcome === 'restart_pending'
+		},
+		dockerShowsJob() {
+			return this.dockerRunning || this.dockerTerminal
+		},
+		// Where the run is, when the core says (an older core does not: then the general sentence, which is
+		// true of the whole run, if less helpful)
+		dockerShowsReason() {
+			const code = this.dockerRefusal?.code
+			return !pick(DOCKER_REFUSALS, code) || DOCKER_REASON_CODES.includes(code)
+		},
+		dockerRunningText() {
+			if (this.dockerChecking) {
+				return this.$t('Checking whether the update started...')
+			}
+			if (this.dockerFinalizing) {
+				return this.$t('Finishing the Docker update...')
+			}
+			const phase = this.dockerStatus.phase
+			if (this.dockerQuiet && !DOCKER_PHASES_BEFORE_INSTALL.includes(phase)) {
+				return this.$t('Installing Docker packages... your apps keep running.')
+			}
+			return this.$t(pick(DOCKER_PHASES, phase) || 'Updating Docker... apps are restarting')
+		},
+		// The plan the person confirmed in this window leaves Docker running: the confirmation said so, and the run must not say the apps restart.
+		dockerQuiet() {
+			return this.dockerStatus.plan_restarts === false
+		},
+		// The core says both from the start of a run; a run of an older core says `to` only once the new Docker
+		// answers, and the plan the person confirmed knows it from the start.
+		dockerFrom() {
+			return this.dockerStatus.from || this.dockerRunPlan?.from
+		},
+		dockerTo() {
+			return this.dockerStatus.to || this.dockerRunPlan?.to
+		},
+		dockerVersions() {
+			const { dockerFrom: from, dockerTo: to } = this
+			return from && to && from !== to ? `${from} → ${to}` : ''
+		},
+		// only a true is believed: an older core does not say, and a string is not a yes
+		dockerMajorJump() {
+			return this.dockerStatus.major_jump === true
+		},
+		// The way back that was tried after a major jump (the old packages) brought Docker back and not the containers:
+		// it is not offered, and this says so where it would have been. A failure that changed nothing has no way back to speak of.
+		dockerNoWayBack() {
+			if (!this.dockerMajorJump || this.dockerNothingChanged) {
+				return ''
+			}
+			const { dockerFrom: from, dockerTo: to } = this
+			const first = from && to
+				? this.$t('The update to Docker {to} could not be completed. There is no way back to Docker {from} that has been shown to work.', { from, to })
+				: this.$t('The update to the new major version of Docker could not be completed. There is no way back to the previous major version that has been shown to work.')
+			return `${first} ${this.$t('In a test, the packages went back and Docker started, but the containers did not start again by themselves. Your images and volumes are in /var/lib/docker; check journalctl -u docker and your apps from the dashboard.')}`
+		},
+		dockerHalfInstalled() {
+			return DOCKER_HALF_INSTALLED.includes(this.dockerStatus.error_code)
+		},
+		dockerSuccessText() {
+			if (this.dockerQuiet) {
+				return this.$t('Docker packages were updated.')
+			}
+			return this.dockerStatus.to ? this.$t('Docker was updated to {version}.', { version: this.dockerStatus.to }) : this.$t('Docker was updated.')
+		},
+		// what the live region says: the lines the person would read, never the log
+		dockerAnnouncement() {
+			const said = []
+			if (this.dockerRefusal) {
+				said.push(this.dockerRefusalText(this.dockerRefusal.code, this.dockerRefusal.names))
+			} else if (!this.dockerConfirming && this.dockerShowsJob) {
+				said.push(...this.dockerJobSentences)
+			}
+			// the message that shows an error has no role of its own: nothing else would speak for it
+			said.push(this.error?.message)
+			return said.filter(Boolean).join(' ')
+		},
+		dockerJobSentences() {
+			if (this.dockerRunning) {
+				const trouble = this.dockerUnknown ? 'Status unknown, reopen this window.' : (this.dockerLost ? 'Connection lost, retrying...' : '')
+				return [this.dockerRunningText, trouble && this.$t(trouble)]
+			}
+			// a result found when the window opened can be old, and the page says when it finished before anything else; one seen to its end has just happened
+			const age = this.dockerFinishedAt && !this.dockerWatched ? `${this.$t('Finished {date}', { date: this.dockerFinishedAt })}.` : ''
+			let result = this.dockerSuccessText
+			if (this.dockerRestartPending) {
+				result = this.$t('Docker is updated, but the old version is still running. Restart it to finish the update.')
+			} else if (this.dockerStatus.state === 'failed') {
+				result = [this.$t('The Docker update failed.'), this.dockerFailureText, this.dockerNoWayBack].filter(Boolean).join(' ')
+			}
+			return [age, result, this.dockerHoldText, this.dockerNotReturnedText]
+		},
+		// a clean success needs no log; everything else may
+		dockerShowsLog() {
+			return !!this.dockerStatus.log && !(this.dockerStatus.state === 'succeeded' && !this.dockerRestartPending)
+		},
+		dockerNothingChanged() {
+			return DOCKER_NOTHING_CHANGED.includes(this.dockerStatus.error_code)
+		},
+		dockerFailureText() {
+			const key = pick(DOCKER_FAILURES, this.dockerStatus.error_code)
+			return key ? this.$t(key) : ''
+		},
+		dockerFinishedAt() {
+			const at = this.dockerStatus.completed_at
+			const date = at ? new Date(at) : null
+			return date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : ''
+		},
+		dockerNotReturned() {
+			const list = this.dockerStatus.not_returned
+			return Array.isArray(list) ? list.filter(item => item && typeof item.name === 'string') : []
+		},
+		// What the run did with the hold, said of a run that went ahead of one: the update drops it and the core puts it back, and
+		// holds_kept says whether it did. A core that does not know holds says nothing. Not seeing the hold again is not the same
+		// as the hold being gone: it says it could not confirm.
+		dockerHoldText() {
+			const { held, holds_kept: kept } = this.dockerStatus
+			if (kept === true) {
+				return this.$t('The hold on Docker\'s packages is in place again.')
+			}
+			return held === true ? this.$t('The hold on Docker\'s packages could not be confirmed after the update: check with apt-mark showhold.') : ''
+		},
+		// how many, not which: the names are in the table, and the live region is for short sentences
+		dockerNotReturnedText() {
+			const n = this.dockerNotReturned.length
+			if (!n) {
+				return ''
+			}
+			return n === 1 ? this.$t('One container did not come back.') : this.$t('{n} containers did not come back.', { n })
+		},
+		// the plan's packages that are not installed yet (Docker 29 needs nftables, Docker 28 did not)
+		dockerNewPackages() {
+			const list = this.dockerPlan?.packages
+			return Array.isArray(list) ? list.filter(item => item && item.new === true && typeof item.name === 'string').map(item => item.name) : []
+		},
+		dockerWontReturn() {
+			return this.dockerContainers.list.filter(item => neverRestarts(item.restart_policy))
+		},
+		dockerMayNotReturn() {
+			return this.dockerContainers.list.filter(item => restartsOnFailure(item.restart_policy))
+		},
+		// the ones that will not come back first, then the ones that may not: they are what the person has to read
+		dockerContainerRows() {
+			return [...this.dockerWontReturn, ...this.dockerMayNotReturn, ...this.dockerContainers.list.filter(item => restartsByItself(item.restart_policy))]
+		},
+		// only a true is believed: an older core does not say
+		dockerSocketContainers() {
+			return this.dockerContainers.list.filter(item => item.docker_socket === true).map(item => item.name)
+		},
+		// The version moves, or the plan is not known well enough to say it does not: then Docker restarts.
+		// It does not when only a plugin or the client moves.
+		dockerPlanRestarts() {
+			const plan = this.dockerPlan
+			const packages = plan?.packages
+			return plan?.from !== plan?.to
+				|| !Array.isArray(packages)
+				|| packages.length === 0
+				|| packages.some(item => DOCKER_RESTARTING_PACKAGES.includes(item?.name))
+		},
+		// "from → to" is for a version that changes; under the same one (a plugin, or a new build of it) there is nothing to point at
+		dockerPlanMoves() {
+			return this.dockerPlan?.from !== this.dockerPlan?.to
+		},
+		dockerPlanLine() {
+			const { from, to } = this.dockerPlan
+			return this.dockerPlanMoves ? `${this.$t('Docker')} ${from} → ${to}` : `${this.$t('Docker')} ${from}`
+		},
+		dockerExposed() {
+			return this.dockerContainers.list.filter(item => item.host_network === true
+				|| (Array.isArray(item.ports) && item.ports.some((port) => {
+					const hostPort = port && port.host_port != null ? port.host_port : port?.port
+					return DOCKER_HOST_PORTS.includes(Number(hostPort))
+				})))
+		},
+		restartCommand() {
+			return DOCKER_RESTART_COMMAND
+		},
+		repairCommand() {
+			return DOCKER_REPAIR_COMMAND
+		},
+	},
+	mounted() {
+		this.loadInitialState()
+	},
+	beforeUnmount() {
+		this.gone = true
+		this.stopPolling()
+		this.stopDockerPolling()
+	},
+	methods: {
+		restartsByItself,
+		neverRestarts,
+		restartsOnFailure,
+		async loadInitialState() {
+			try {
+				const response = await this.$api.sys.getSystemPackageUpdateStatus()
+				if (this.gone) {
+					return
+				}
+				const status = response.data.data
+				if (status) {
+					this.status = status
+					if (this.isRunning) {
+						this.startPolling()
+						return
+					}
+				}
+			} catch {
+				// The package check below provides the useful error message.
+			}
+			// apt is busy with a run: a package check now would only wait behind it
+			if (this.followDockerStatus(await this.readDockerStatus()) || this.gone) {
+				return
+			}
+			this.checkPackages(true)
+		},
+		// The Docker update's state, or null: a core older than the Docker update has no such route, and
+		// a failed read is not an answer. Only a read that worked is remembered as one.
+		async readDockerStatus() {
+			try {
+				const status = (await this.$api.sys.getDockerUpdateStatus()).data.data
+				if (this.gone) {
+					return null
+				}
+				this.dockerStatusRead = true
+				return status ? { ...emptyDockerStatus(), ...status } : null
+			} catch {
+				return null
+			}
+		},
+		// shows what a read found; true when it is a run, which is then followed
+		followDockerStatus(status) {
+			if (!status) {
+				return false
+			}
+			this.dockerStatus = status
+			if (!this.dockerRunning) {
+				return false
+			}
+			this.startDockerPolling()
+			return true
+		},
+		async checkPackages(preserveStatus = false) {
+			this.stopPolling()
+			// "Check for updates" after a first read that failed is the second chance to see a run
+			if (preserveStatus !== true && !this.dockerStatusRead && (this.followDockerStatus(await this.readDockerStatus()) || this.gone)) {
+				return
+			}
+			this.isChecking = true
+			this.error = null
+			if (preserveStatus !== true) {
+				this.status = emptyStatus()
+				this.dockerRefusal = null
+			}
+			try {
+				const response = await this.$api.sys.getSystemPackages()
+				this.info = response.data.data || emptyInfo()
+			} catch (error) {
+				this.info = emptyInfo()
+				this.fail('Could not check for system package updates.', error)
+			} finally {
+				this.isChecking = false
+			}
+		},
+		confirmUpdate() {
+			if (this.dockerRunning) {
+				return
+			}
+			this.$buefy.dialog.confirm({
+				title: this.$t('Update system packages'),
+				message: `${this.$t(this.info.docker ? 'Are you sure you want to update the system packages listed? Docker is not part of this update.' : 'Are you sure you want to update the system packages listed?')}<br><br>${this.$t('The package list may change before the update starts.')}`,
+				type: 'is-warning',
+				hasIcon: true,
+				confirmText: this.$t('Update packages'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: () => this.startUpdate(),
+			})
+		},
+		async startUpdate() {
+			if (this.dockerRunning) {
+				return
+			}
+			this.isStarting = true
+			this.error = null
+			try {
+				const response = await this.$api.sys.startSystemPackageUpdate()
+				this.status = response.data.data || emptyStatus()
+				this.startPolling()
+			} catch (error) {
+				if (error?.response?.data?.data) {
+					this.status = error.response.data.data
+					if (this.status.state === 'running' || this.isReconciliationPending) {
+						this.startPolling()
+					}
+				}
+				this.fail('Could not start the system package update.', error)
+				// refused (409) for a reason other than "already running": what was on screen may no longer be so
+				if (error?.response?.status === 409 && this.status.state !== 'running' && !this.isReconciliationPending) {
+					this.checkPackages(true)
+				}
+			} finally {
+				this.isStarting = false
+			}
+		},
+		startPolling() {
+			this.stopPolling()
+			this.runWatched = true
+			this.fetchStatus()
+			this.pollTimer = setInterval(() => this.fetchStatus(), 1000)
+		},
+		stopPolling() {
+			if (this.pollTimer) {
+				clearInterval(this.pollTimer)
+				this.pollTimer = null
+			}
+		},
+		async fetchStatus() {
+			try {
+				const response = await this.$api.sys.getSystemPackageUpdateStatus()
+				this.status = response.data.data || emptyStatus()
+				if (!this.isRunning) {
+					this.stopPolling()
+				}
+			} catch (error) {
+				this.fail('Could not load the system package update status.', error)
+				this.stopPolling()
+			}
+		},
+		// The confirmation is a view of this window: container names are third-party strings and
+		// Buefy's dialog would render its message as HTML. What is shown is the plan the person is
+		// confirming, copied here, so a check that lands meanwhile cannot change it under them.
+		openDockerConfirm() {
+			if (!this.dockerUpdate?.available || this.isRunning || this.dockerRunning) {
+				return
+			}
+			this.dockerRefusal = null
+			this.error = null
+			this.dockerPlan = JSON.parse(JSON.stringify(this.dockerUpdate))
+			this.dockerHeldConfirmed = false
+			this.dockerConfirming = true
+			if (this.dockerPlanRestarts) {
+				this.loadDockerContainers()
+			} else {
+				// nothing stops, so the person has nothing to wait for
+				this.dockerContainersSeq++
+				this.dockerContainers = emptyContainers()
+			}
+			this.showTop('dockerConfirmTitle')
+		},
+		closeDockerConfirm() {
+			if (this.dockerStarting) {
+				return
+			}
+			this.dockerConfirming = false
+			this.dockerContainersSeq++
+			// the scroll offset stays: the person is back where the button was
+			this.$nextTick(() => this.$refs.dockerUpdateButton?.$el?.focus?.())
+		},
+		// A new view replaces the old one inside the same scrolling body, so it would open wherever
+		// the old one was scrolled to, with its warning out of sight. It opens at its top, and the
+		// focus (which died with the button that was pressed) goes to its heading.
+		showTop(ref) {
+			this.$nextTick(() => {
+				const body = this.$el?.querySelector?.('.modal-card-body')
+				if (body) {
+					body.scrollTop = 0
+				}
+				this.$refs[ref]?.focus?.({ preventScroll: true })
+			})
+		},
+		async loadDockerContainers() {
+			const seq = ++this.dockerContainersSeq
+			this.dockerContainers = { loading: true, failed: false, list: [] }
+			let next
+			try {
+				const data = (await this.$api.sys.getDockerContainers()).data.data
+				if (!data || data.running === false || !Array.isArray(data.containers)) {
+					throw new Error('Docker did not list its containers')
+				}
+				next = { loading: false, failed: false, list: data.containers.filter(item => item && typeof item.name === 'string') }
+			} catch {
+				// not being able to list them must not stand in the way of the update
+				next = { loading: false, failed: true, list: [] }
+			}
+			if (seq === this.dockerContainersSeq) {
+				this.dockerContainers = next
+			}
+		},
+		async startDockerUpdate() {
+			if (this.isRunning || this.dockerRunning || !this.dockerPlan?.plan_id) {
+				return
+			}
+			// a hold is crossed on the person's word only: the button waits for the box, and nothing else gets round it
+			if (this.dockerAwaitsBox) {
+				return
+			}
+			this.dockerStarting = true
+			this.dockerRefusal = null
+			this.error = null
+			const confirmed = { from: this.dockerPlan.from, to: this.dockerPlan.to }
+			const restarts = this.dockerPlanRestarts
+			try {
+				// allow_held only for a held plan whose box is ticked, never otherwise
+				const body = this.dockerPlanHeld ? { plan_id: this.dockerPlan.plan_id, allow_held: true } : { plan_id: this.dockerPlan.plan_id }
+				const response = await this.$api.sys.startDockerUpdate(body)
+				if (this.gone) {
+					return
+				}
+				this.dockerStatus = { ...emptyDockerStatus(), ...response.data.data, plan_restarts: restarts }
+				this.dockerRunPlan = confirmed
+				this.dockerConfirming = false
+				this.startDockerPolling()
+				this.showTop('dockerJobTitle')
+			} catch (error) {
+				if (this.gone) {
+					return
+				}
+				const data = error?.response?.data?.data
+				const code = typeof data?.error_code === 'string' ? data.error_code : ''
+				const refused = error?.response && (code || [409, 501].includes(error.response.status))
+				this.dockerConfirming = false
+				if (!refused) {
+					// A lost answer is not a refusal: the core may have started the unit. Ask before saying it did not,
+					// and until it answers say nothing of a run either.
+					this.dockerChecking = true
+					const status = await this.readDockerStatus()
+					this.dockerChecking = false
+					if (this.gone) {
+						return
+					}
+					if (['running', 'finalizing'].includes(status?.state)) {
+						this.dockerRunPlan = confirmed
+						this.followDockerStatus({ ...status, plan_restarts: restarts })
+						this.showTop('dockerJobTitle')
+						return
+					}
+					this.fail('Could not start the Docker update.', error)
+					return
+				}
+				// the core's reason travels in the data because the check below clears `error`
+				const reason = typeof data?.error === 'string' ? data.error : error.response.data?.message
+				const refusal = { code, reason: typeof reason === 'string' ? reason : '', names: cleanNames(data?.refusal_detail) }
+				this.dockerRefusal = refusal
+				if (code === 'held') {
+					// The hold came after this window looked, so the plan was confirmed without it. What there is to say waits
+					// for the new check: a core that knows holds now offers the update on the hold, with its notice.
+					this.dockerRefusal = null
+					this.dockerStarting = false
+					await this.checkPackages(true)
+					if (!this.gone) {
+						// A core that knows holds names the packages in its 409 and says `held` in its check, and for it the sentence
+						// of a hold that is deliberate and never overridden is false: it is for a core that can confirm no hold.
+						// What else the check refused is said here too, in its own words (the Docker line below does not repeat it, and
+						// is not in the live region: the confirmation is gone, and nothing else would tell the person why). When it refused
+						// nothing and offers no update on a hold (it could not be read, or it finds no hold), nothing else says that the
+						// update did not start.
+						if (this.dockerHeld) {
+							this.dockerRefusal = { ...refusal, code: 'held_now' }
+						} else if (!refusal.names.length && this.dockerUpdate?.held !== true) {
+							this.dockerRefusal = refusal
+						} else if (this.dockerUpdate?.refusal) {
+							this.dockerRefusal = { code: this.dockerUpdate.refusal, reason: '', names: cleanNames(this.dockerUpdate.refusal_detail) }
+						} else {
+							this.dockerRefusal = { ...refusal, code: 'held_not_started' }
+						}
+					}
+				} else if (code === 'running') {
+					this.dockerStarting = false
+					await this.loadInitialState()
+					// the job it ran into is on screen now, and says more than the refusal
+					if (this.isRunning || this.dockerRunning) {
+						this.dockerRefusal = null
+					}
+				} else if (error.response.status !== 501 && !DOCKER_TRANSIENT.includes(code)) {
+					// what was on screen (the plan, the buttons) may no longer be so
+					this.checkPackages(true)
+				}
+			} finally {
+				this.dockerStarting = false
+			}
+		},
+		// A setTimeout chain, not an interval: one request at a time, and it goes on after an error
+		// (the gateway can blink while Docker restarts). Only a terminal state, or ten minutes
+		// without an answer, ends it.
+		startDockerPolling() {
+			this.dockerPollActive = true
+			this.dockerLostSince = 0
+			clearTimeout(this.dockerPollTimer)
+			this.pollDocker()
+		},
+		stopDockerPolling() {
+			this.dockerPollActive = false
+			clearTimeout(this.dockerPollTimer)
+			this.dockerPollTimer = null
+		},
+		scheduleDockerPoll() {
+			clearTimeout(this.dockerPollTimer)
+			this.dockerPollTimer = setTimeout(() => this.pollDocker(), DOCKER_POLL_MS)
+		},
+		async pollDocker() {
+			if (this.dockerPollBusy) {
+				return
+			}
+			this.dockerPollBusy = true
+			let status = null
+			try {
+				status = (await this.$api.sys.getDockerUpdateStatus()).data.data || null
+			} catch {
+				status = null
+			}
+			this.dockerPollBusy = false
+			if (!this.dockerPollActive) {
+				return
+			}
+			if (status) {
+				this.dockerStatus = { ...emptyDockerStatus(), ...status, plan_restarts: this.dockerStatus.plan_restarts ?? null }
+				this.dockerLost = false
+				this.dockerLostSince = 0
+				this.dockerUnknown = false
+				if (this.dockerRunning) {
+					this.scheduleDockerPoll()
+					return
+				}
+				this.dockerWatched = true
+				this.stopDockerPolling()
+				this.dockerRefusal = null
+				this.dockerRunPlan = null
+				// the new version shows without anyone pressing "Check for updates"
+				this.checkPackages(true)
+				return
+			}
+			const now = Date.now()
+			if (!this.dockerLostSince) {
+				this.dockerLostSince = now
+			}
+			this.dockerLost = true
+			if (now - this.dockerLostSince >= DOCKER_LOST_MS) {
+				this.dockerUnknown = true
+				this.stopDockerPolling()
+				return
+			}
+			this.scheduleDockerPoll()
+		},
+		dismissDockerResult() {
+			this.dockerStatus = emptyDockerStatus()
+		},
+		dockerRefusalText(code, names) {
+			const sentence = this.$t(pick(DOCKER_REFUSALS, code) || 'ReCasaOS did not update Docker.')
+			const list = cleanNames(names)
+			const extra = list.length && pick(DOCKER_REFUSAL_NAMES, code)
+			return extra ? `${sentence} ${this.$t(extra, { names: list.join(', ') })}` : sentence
+		},
+		// A translated sentence first; the core's own words, when it sent some, as the detail.
+		// axios's "Request failed with status code 500" is never shown.
+		fail(message, error) {
+			const detail = error?.response?.data?.message || error?.response?.data?.data
+			this.error = { message: this.$t(message), detail: typeof detail === 'string' ? detail : '' }
+		},
+	},
+}
+</script>
+
+<style lang="scss" scoped>
+.package-loading {
+	min-height: 8rem;
+}
+
+.package-empty {
+	padding: 2rem 1rem;
+	text-align: center;
+}
+
+.package-list {
+	max-height: 18rem;
+	overflow-y: auto;
+	font-size: 0.75rem;
+
+	table {
+		margin-bottom: 0;
+	}
+
+	th,
+	td {
+		padding: 0.35rem 0.5rem;
+		line-height: 1.35;
+	}
+}
+
+// a long name or version wraps inside its cell, and a table that is still too wide scrolls inside its box
+.docker-confirm .package-list,
+.docker-job .package-list {
+	overflow-x: auto;
+
+	td {
+		overflow-wrap: anywhere;
+	}
+}
+
+// the reason of a disabled confirm button has a row of its own above the buttons, so that a narrow window does not squeeze them
+.docker-confirm-foot {
+	flex-wrap: wrap;
+}
+
+.docker-held-reason {
+	flex: 1 1 100%;
+	margin-bottom: 0.5rem;
+	text-align: right;
+}
+
+.docker-wont-return td {
+	background: rgba(255, 159, 10, 0.18);
+	font-weight: 600;
+}
+
+.docker-may-not-return td {
+	background: rgba(255, 159, 10, 0.1);
+}
+
+.docker-subtitle {
+	font-weight: 600;
+}
+
+.docker-line {
+	padding-top: 1rem;
+	border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.docker-title {
+	font-weight: 600;
+
+	// it takes the focus when a view opens, to be read; nobody types into it
+	&:focus {
+		outline: none;
+	}
+}
+
+.docker-updates {
+	margin: 0.25rem 0 0 1rem;
+	list-style: disc;
+}
+
+.docker-command {
+	margin: 0.25rem 0 0;
+	padding: 0.5rem 0.75rem;
+	border-radius: 0.5rem;
+	background: rgba(128, 128, 128, 0.12);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	user-select: all;
+	font-size: 0.75rem;
+}
+
+.package-log {
+	max-height: 14rem;
+	overflow: auto;
+
+	pre {
+		margin: 0;
+		white-space: pre-wrap;
+		word-break: break-word;
+		font-size: 0.75rem;
+	}
+}
+</style>

@@ -1,0 +1,179 @@
+<template>
+	<div id="app" :class="{ 'is-dark-bg': $route.meta.showBackground }" class="is-flex is-flex-direction-column" :style="{ '--vh': vh }">
+		<template v-if="$route.meta.showBackground">
+			<!-- Background Layer Start -->
+			<casa-wallpaper :animate="isWelcome ? initAni : noneAni"></casa-wallpaper>
+			<!-- Background Layer End -->
+
+			<div class="base-bar is-flex"
+				style="background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, var(--casa-under-wallpaper) 100%);">
+				<!-- BrandBar Start -->
+				<brand-bar v-if="!$store.state.isMobile && $route.path === '/'"
+					v-animate-css="brandAni"></brand-bar>
+				<!-- BrandBar End -->
+				<!-- ContactBar Start -->
+				<contact-bar v-if="!$store.state.isMobile && $route.path === '/'"
+					v-animate-css="contactAni"></contact-bar>
+				<!-- ContactBar End -->
+			</div>
+
+		</template>
+
+		<!-- Router View Start -->
+		<router-view />
+		<!-- Router View End -->
+
+		<app-launcher-check v-if="appLauncher"
+			:app-detail="appLauncher" />
+		<app-iframe v-if="appIframe"
+			:app-name="appIframe.name"
+			:url="appIframe.url"
+			@close="closeAppFrame" />
+
+	</div>
+</template>
+
+<script>
+import BrandBar from './components/BrandBar.vue'
+import ContactBar from './components/ContactBar.vue'
+import CasaWallpaper from './components/wallpaper/CasaWallpaper.vue'
+import AppIframe from './components/Apps/AppIframe.vue'
+import AppLauncherCheck from './views/AppLauncherCheck.vue'
+import { mixin } from './mixins/mixin'
+import events from '@/events/events'
+
+import customIconConfig from '@/plugins/casa-icons'
+
+export default {
+	components: {
+		BrandBar,
+		ContactBar,
+		CasaWallpaper,
+		AppIframe,
+		AppLauncherCheck,
+	},
+	mixins: [mixin],
+	data() {
+		return {
+			// isLoading: true,
+			steps: [],
+			noneAni: {
+				classes: 'fadeIn',
+				duration: 500,
+			},
+			initAni: {
+				classes: 'zoomOutIn',
+				duration: 2500,
+			},
+			brandAni: {
+				classes: 'fadeInLeft',
+				duration: 700,
+			},
+			contactAni: {
+				classes: 'fadeInRight',
+				duration: 700,
+			},
+			vh: '0px',
+			appIframe: null,
+			appLauncher: null,
+		}
+	},
+
+	computed: {
+		isLoading() {
+			return this.$store.state.siteLoading
+		},
+		isWelcome() {
+			return this.$store.state.needInitialization
+		},
+	},
+
+	created() {
+		console.log(`%c
+_____             _____ _____
+|     |___ ___ ___|     |   __|
+|   --| .'|_ -| .'|  |  |__   |
+|_____|__,|___|__,|_____|_____|
+-- ReCasaOS, built on CasaOS by IceWhale --
+`, `font-family: monospace`)
+
+		this.$buefy.config.setOptions(customIconConfig)
+	},
+	mounted() {
+		this.setInitLang()
+		window.addEventListener('resize', this.onWindowResize)
+		this.onWindowResize()
+		const vh = window.innerHeight * 0.01
+		this.vh = `${vh}px`
+		this.$EventBus.$on(events.OPEN_APP_IFRAME, this.openAppIframe)
+		this.$EventBus.$on(events.OPEN_APP_LAUNCHER, this.openAppLauncher)
+		this.$EventBus.$on(events.CLOSE_APP_IFRAME, this.closeAppFrame)
+	},
+	beforeUnmount() {
+		window.removeEventListener('resize', this.onWindowResize)
+		this.$EventBus.$off(events.OPEN_APP_IFRAME, this.openAppIframe)
+		this.$EventBus.$off(events.OPEN_APP_LAUNCHER, this.openAppLauncher)
+		this.$EventBus.$off(events.CLOSE_APP_IFRAME, this.closeAppFrame)
+	},
+	methods: {
+		openAppIframe(appData) {
+			this.appLauncher = null
+			this.appIframe = appData
+		},
+		openAppLauncher(appData) {
+			this.appIframe = null
+			this.appLauncher = appData
+		},
+		closeAppFrame() {
+			this.appIframe = null
+			this.appLauncher = null
+		},
+		/**
+		 * @description: Get and Set default language
+		 * @return {*} void
+		 */
+		setInitLang() {
+			let lang = localStorage.getItem('lang') ? localStorage.getItem('lang') : this.getLangFromBrowser()
+			lang = lang.includes('_') ? lang : 'en_us'
+			this.setLang(lang)
+		},
+		/**
+		 * @description: Handle on Window reize
+		 * @return {*}
+		 */
+		onWindowResize() {
+			const isMobile = document.body.clientWidth < 480
+			this.$store.commit('SET_IS_MOBILE', isMobile)
+		},
+	},
+	sockets: {
+		connect() {
+			console.log('socket connected')
+		},
+
+	},
+}
+</script>
+
+<style lang="scss" scoped>
+#app {
+	width: 100vw;
+	height: 100dvh;
+	font-weight: 400;
+	font-size: 0.875rem;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	color: var(--casa-text-body);
+	overflow-y: hidden;
+
+	&.is-dark-bg {
+		background-color: var(--casa-under-wallpaper);
+	}
+
+	& .base-bar {
+		position: fixed;
+		bottom: 0;
+		z-index: 10;
+	}
+}
+</style>
