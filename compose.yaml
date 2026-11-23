@@ -1,6 +1,6 @@
 services:
   files:
-    image: ${FILES_IMAGE:-ghcr.io/jtenniswood/file-browser:latest}
+    image: ${FILES_IMAGE:-ghcr.io/jtenniswood/files:latest}
     init: true
     restart: unless-stopped
     user: '${FILES_UID:-1000}:${FILES_GID:-1000}'

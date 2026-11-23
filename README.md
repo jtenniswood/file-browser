@@ -9,7 +9,7 @@ You need Docker with the Compose plugin, `curl`, and `openssl` on a Linux, macOS
 ```sh
 mkdir -p file-browser/files-data
 cd file-browser
-curl -fsSLO https://raw.githubusercontent.com/jtenniswood/file-browser/main/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/jtenniswood/files/main/compose.yaml
 test -f .env || (umask 077; printf 'FILES_PASSWORD=%s\nFILES_UID=%s\nFILES_GID=%s\n' \
   "$(openssl rand -hex 24)" "$(id -u)" "$(id -g)" > .env)
 docker compose up -d --wait
@@ -17,7 +17,7 @@ docker compose up -d --wait
 
 Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host. Sign in as `files` and use the `FILES_PASSWORD` value from `.env`. Display it with `sed -n 's/^FILES_PASSWORD=//p' .env`. The app shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
 
-The Compose file pulls `ghcr.io/jtenniswood/file-browser:latest` from GitHub Container Registry. [View available image tags](https://github.com/jtenniswood/file-browser/pkgs/container/file-browser).
+The Compose file pulls `ghcr.io/jtenniswood/files:latest` from GitHub Container Registry. [View available image tags](https://github.com/jtenniswood/files/pkgs/container/files).
 
 ## Choose a folder or port
 
@@ -31,7 +31,7 @@ Set these options in `.env` beside `compose.yaml`, then run `docker compose up -
 | `FILES_PASSWORD` | Login password, at least 12 characters. Use single quotes in `.env` for a password containing `$` or `#`. | Required |
 | `FILES_UID`, `FILES_GID` | Numeric user and group the container runs as. The install commands set them to your user and group. | `1000` |
 | `FILES_MAX_UPLOAD_BYTES` | Maximum upload size per file. | `10737418240` (10 GiB) |
-| `FILES_IMAGE` | Image tag to run. Set it to a `sha-…` tag to pin a specific build. | `ghcr.io/jtenniswood/file-browser:latest` |
+| `FILES_IMAGE` | Image tag to run. Set it to a `sha-…` tag to pin a specific build. | `ghcr.io/jtenniswood/files:latest` |
 
 The container user needs permission to read and write the host folder. If the service fails to start, run `docker compose logs files` and check that the folder exists and that `FILES_UID` and `FILES_GID` have access.
 
@@ -53,8 +53,8 @@ Run `docker compose down` to stop and remove the container. Your files stay in t
 Clone this repository and follow the folder and `.env` setup above from inside the checkout. The checkout already contains `compose.yaml`. Then run these commands.
 
 ```sh
-docker build -t file-browser:local .
-FILES_IMAGE=file-browser:local docker compose up -d --pull never --wait
+docker build -t files:local .
+FILES_IMAGE=files:local docker compose up -d --pull never --wait
 ```
 
 For development outside Docker, use Node.js 24, Corepack, and `tar`. Run `corepack pnpm install --frozen-lockfile` followed by `corepack pnpm build:files`. With `FILES_PASSWORD` exported in your shell, run `corepack pnpm start:files`. For the local test suite, run `corepack pnpm exec vitest run`.
