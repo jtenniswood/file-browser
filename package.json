@@ -86,7 +86,7 @@
     "@antfu/eslint-config": "^2.27.3",
     "@babel/core": "^7.22.9",
     "@babel/eslint-parser": "^7.25.9",
-    "@babel/preset-env": "7.26.0",
+    "@babel/preset-env": "7.29.14",
     "@babel/preset-typescript": "^7.22.5",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@vitejs/plugin-vue": "^5.2.4",
