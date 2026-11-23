@@ -70,7 +70,7 @@ importers:
         version: 4.0.1
       codemirror:
         specifier: ^5.41.0
-        version: 5.65.18
+        version: 5.65.21
       composerize:
         specifier: ^1.7.6
         version: 1.7.6
@@ -2960,8 +2960,8 @@ packages:
     resolution: {integrity: sha512-3Pe/CF1Nn94hyhIYpjtiLhdCoEoz0DqQ+988E9gmeEdQZlojxnOb74wctFyuwWQHzqyf9X7C7MG8juUpqBJT8w==}
     engines: {node: '>=0.8'}
 
-  codemirror@5.65.18:
-    resolution: {integrity: sha512-Gaz4gHnkbHMGgahNt3CA5HBk5lLQBqmD/pBgeB4kQU6OedZmqMBjlRF0LSrp2tJ4wlLNPm2FfaUd1pDy0mdlpA==}
+  codemirror@5.65.21:
+    resolution: {integrity: sha512-6teYk0bA0nR3QP0ihGMoxuKzpl5W80FpnHpBJpgy66NK3cZv5b/d/HY8PnRvfSsCG1MTfr92u2WUl+wT0E40mQ==}
 
   color-convert@1.9.3:
     resolution: {integrity: sha512-QfAUtd+vFdAtFQcC8CCyYt1fYWxSqAiK2cSD6zDB8N3cpsEBAvRxp9zOGg6G/SHHJYAT88/az/IuDGALsNVbGg==}
@@ -10821,7 +10821,7 @@ snapshots:
 
   clone@2.1.2: {}
 
-  codemirror@5.65.18: {}
+  codemirror@5.65.21: {}
 
   color-convert@1.9.3:
     dependencies:
