@@ -10,6 +10,16 @@
 			</header>
 			<p v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</p>
 			<p v-if="notice" class="notification is-success is-light" role="status">{{ notice }}</p>
+			<section class="files-account-card settings-row" aria-labelledby="appearance-title">
+				<h2 id="appearance-title" class="title is-5 mb-0">{{ $t('Appearance') }}</h2>
+				<div class="select">
+					<select v-model="theme" aria-labelledby="appearance-title" @change="setThemePreference(theme)">
+						<option value="light">{{ $t('Light') }}</option>
+						<option value="dark">{{ $t('Dark') }}</option>
+						<option value="system">{{ $t('Auto') }}</option>
+					</select>
+				</div>
+			</section>
 			<section class="files-account-card" aria-labelledby="account-title">
 				<h2 id="account-title" class="title is-5 mb-2">Your account</h2>
 				<p class="mb-5">{{ user.username }} · {{ roleLabel(user.role) }}</p>
@@ -105,12 +115,14 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import TwoFactorPanel from '@/components/account/TwoFactorPanel.vue'
+import { readThemePreference, setThemePreference } from '@/mixins/app/themePreference'
 import { filesAccountRequest, filesSessionExpired } from '@/service/filesAccounts'
 
 const store = useStore()
 const router = useRouter()
 const user = computed(() => store.state.user)
 const isAdmin = computed(() => user.value.role === 'admin')
+const theme = ref(readThemePreference(undefined, 'light'))
 const users = ref([])
 const loadingUsers = ref(isAdmin.value)
 const currentPassword = ref('')

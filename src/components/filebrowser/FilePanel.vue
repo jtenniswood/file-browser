@@ -67,19 +67,12 @@
 								@open="showSharedList"></share-entry-button>
 							<trash-entry-button :active="pageType == `trash`"
 								@open="showTrash"></trash-entry-button>
-							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="files-theme is-flex is-align-items-center">
-								<b-icon aria-hidden="true" icon="cog-outline" size="is-small" /><span>{{ $t('Settings') }}</span>
+							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="is-flex list-item new-list-item">
+								<div class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
+									<b-icon aria-hidden="true" icon="settings-outline" pack="casa" />
+								</div>
+								<div><span>{{ $t('Settings') }}</span></div>
 							</RouterLink>
-							<label v-if="$standaloneFiles" class="files-theme is-flex is-align-items-center is-justify-content-space-between">
-								<span>{{ $t('Appearance') }}</span>
-								<span class="select is-small">
-									<select v-model="theme" @change="setThemePreference(theme)">
-										<option value="light">{{ $t('Light') }}</option>
-										<option value="dark">{{ $t('Dark') }}</option>
-										<option value="system">{{ $t('Auto') }}</option>
-									</select>
-								</span>
-							</label>
 						</div>
 						<!-- Bottom Action End -->
 					</div>
@@ -305,7 +298,6 @@ import MergeStorages from '@/components/Storage/MergeStorages.vue'
 
 // Drop
 import events from '@/events/events'
-import { readThemePreference, setThemePreference } from '@/mixins/app/themePreference'
 import VueBreakpointMixin from '@/mixins/breakpoint'
 import { filterHiddenFiles, sortFiles } from '@/mixins/file_utils'
 import { mixin } from '@/mixins/mixin'
@@ -356,7 +348,6 @@ export default {
 	},
 	data() {
 		return {
-			theme: readThemePreference(undefined, 'light'),
 			isCreated: false,
 			isUnmounted: false,
 			isLoading: true,
@@ -550,7 +541,6 @@ export default {
 	},
 
 	methods: {
-		setThemePreference,
 		/*************************************************
 		 * PART 0  Self
 		 **************************************************/
@@ -1323,13 +1313,6 @@ export default {
 	white-space: nowrap;
 	vertical-align: middle;
 	direction: ltr;
-}
-
-.files-theme {
-	gap: 0.5rem;
-	margin-top: 0.25rem;
-	padding: 0.375rem 0.75rem;
-	color: var(--casa-text-secondary);
 }
 
 .full-screen {
