@@ -40,6 +40,7 @@ const filePanelMap = {
 	'excel-viewer': union(typeMap['application-vnd.ms-excel']),
 	'pdf-viewer': typeMap['application-pdf'],
 	'stl-viewer': typeMap['application-x-model'],
+	'psd-viewer': ['psd'],
 }
 
 export const mixin = {
