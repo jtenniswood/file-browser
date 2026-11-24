@@ -4,6 +4,7 @@ import escape from 'lodash/escape'
 import union from 'lodash/union'
 import copy from 'clipboard-copy'
 import { renderSize } from './file_utils'
+import { automaticFolderIcon } from '@/components/filebrowser/automaticFolderIcon'
 
 const typeMap = {
 	'image-x-generic': ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff'],
@@ -87,27 +88,7 @@ export const mixin = {
 			const isDir = (has(item, 'is_dir') || has(item, 'isFolder')) ? item.is_dir : false
 			let icon = 'unknown'
 			if (isDir) {
-				if (item.type == 'application') {
-					icon = 'folder-application'
-				} else if (item.type == 'usb') {
-					icon = 'folder-usb'
-				} else if (['sata', 'nvme', 'spi', 'sas'].includes(item.type)) {
-					icon = 'folder-hdd'
-				} else if (item.type == 'home') {
-					icon = 'folder-root'
-				} else if (item.name == 'Media') {
-					icon = 'folder-video'
-				} else if (item.name == 'Downloads') {
-					icon = 'folder-download'
-				} else if (item.name == 'Documents') {
-					icon = 'folder-documents'
-				} else if (item.name == 'Gallery') {
-					icon = 'folder-pictures'
-				} else if (item.name == 'AppData') {
-					icon = 'folder-application'
-				} else {
-					icon = 'folder-default'
-				}
+				icon = `folder-${automaticFolderIcon(item)}`
 			} else {
 				const ext = this.getFileExt(item)
 				Object.keys(typeMap).forEach((_type) => {
