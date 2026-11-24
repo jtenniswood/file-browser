@@ -57,6 +57,13 @@
 
             &.files-folder-header {
                 padding-bottom: 1.25rem;
+
+                .action-btn {
+                    .file-dropdown,
+                    .dropdown-trigger {
+                        display: flex;
+                    }
+                }
             }
 
             .input.is-rounded {
