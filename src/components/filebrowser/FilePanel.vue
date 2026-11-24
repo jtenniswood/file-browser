@@ -11,7 +11,7 @@
 				<!-- Viewer End -->
 
 				<!-- NavBar Start -->
-				<b-sidebar ref="sidebar" v-model="isSideBarOpen" :overlay="isMobile" :position="sideBarPosition"
+			<b-sidebar ref="sidebar" v-model="isSideBarOpen" :can-cancel="!settingsOpen" :overlay="isMobile" :position="sideBarPosition"
 					fullheight>
 					<div class="nav-bar is-flex is-flex-direction-column">
 						<div class="is-flex-grow-1 is-flex-shrink-1 nav-bar-top scrollbars-light">
@@ -67,7 +67,9 @@
 								@open="showDropPage"></drop-entry-button>
 							<share-entry-button v-if="!$standaloneFiles" :active="pageType == `share`"
 								@open="showSharedList"></share-entry-button>
-							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="is-flex list-item new-list-item">
+						<RouterLink v-if="$standaloneFiles"
+							:to="{ name: 'files', query: { ...$route.query, settings: null }, state: { filesSettingsBack: $route.fullPath } }"
+							aria-haspopup="dialog" class="is-flex list-item new-list-item">
 								<div class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
 									<b-icon aria-hidden="true" icon="settings-outline" pack="casa" />
 								</div>
@@ -492,6 +494,9 @@ export default {
 		containerClass() {
 			return this.$route.path == '/files' ? 'file-panel full-screen ' : ''
 		},
+		settingsOpen() {
+			return this.$standaloneFiles && this.$route.query.settings !== undefined
+		},
 		sideBarPosition() {
 			return this.isMobile ? 'fixed' : 'static'
 		},
@@ -595,6 +600,8 @@ export default {
 			this.setUploaderOpts()
 			// Listen to ESC button to exit preview
 			document.onkeyup = (e) => {
+				if (this.settingsOpen)
+					return
 				switch (e.code) {
 					case 'Escape':
 						if (this.isShowDetial) {
@@ -616,7 +623,7 @@ export default {
 			}
 			// paste
 			document.onpaste = () => {
-				if (!this.isShowDetial && !this.isModalOpen) {
+				if (!this.settingsOpen && !this.isShowDetial && !this.isModalOpen) {
 					this.paste('overwrite')
 				}
 			}

@@ -5,6 +5,7 @@
 				<component :is="Component" />
 			</KeepAlive>
 		</RouterView>
+		<StandaloneFilesSettings v-if="route.query.settings !== undefined" @close="closeSettings" />
 	</template>
 	<StandaloneSignIn v-else-if="ready" :needs-setup="session.needsSetup" :setup-code-required="session.setupCodeRequired"
 		@complete="signIn" @refresh="loadSession" />
@@ -22,16 +23,32 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
+import StandaloneFilesSettings from './StandaloneFilesSettings.vue'
 import StandaloneSignIn from './StandaloneSignIn.vue'
 import { filesAccountRequest, filesSessionExpired } from '@/service/filesAccounts'
 
 const store = useStore()
+const route = useRoute()
+const router = useRouter()
 const session = ref(null)
 const user = ref(null)
 const ready = ref(false)
 const error = ref('')
 let loading = false
+
+function closeSettings() {
+	const query = { ...route.query }
+	delete query.settings
+	const files = { name: 'files', query }
+	const { back, filesSettingsBack } = router.options.history.state
+	// An old bookmark or a directly opened modal has no Files entry to return to.
+	if (back && back === filesSettingsBack)
+		router.back()
+	else
+		router.replace(files)
+}
 
 function signIn(account) {
 	user.value = account

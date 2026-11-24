@@ -1,175 +1,175 @@
 <template>
-	<div class="settings-page">
-		<header class="settings-header">
-			<nav class="breadcrumb has-succeeds-separator mb-0" aria-label="Breadcrumb">
-				<ul>
-					<li><RouterLink :to="{ name: 'files', query: $route.query }">{{ $t('Files') }}</RouterLink></li>
-					<li><h1 id="settings-title" class="title is-header mb-0" aria-current="page">{{ $t('Settings') }}</h1></li>
-				</ul>
+	<dialog ref="dialog" class="settings-dialog" aria-labelledby="settings-title" @cancel.prevent="emit('close')" @keydown.esc.stop>
+		<div class="settings-page">
+			<header class="settings-header">
+				<h1 id="settings-title" class="title is-header mb-0">{{ $t('Settings') }}</h1>
+				<button class="delete" type="button" :aria-label="$t('Close')" autofocus @click="emit('close')"></button>
+			</header>
+
+			<nav class="settings-nav scrollbars-light" aria-label="Settings sections">
+				<button class="settings-nav-link" type="button"
+					:aria-current="activeSection === 'preferences-title' ? 'location' : undefined" @click="jumpToSection('preferences-title')">
+					<b-icon icon="tune-variant" aria-hidden="true" />
+					Preferences
+				</button>
+				<button class="settings-nav-link" type="button"
+					:aria-current="activeSection === 'account-title' ? 'location' : undefined" @click="jumpToSection('account-title')">
+					<b-icon icon="account-outline" aria-hidden="true" />
+					Your account
+				</button>
+				<button v-if="isAdmin" class="settings-nav-link" type="button"
+					:aria-current="activeSection === 'users-title' ? 'location' : undefined" @click="jumpToSection('users-title')">
+					<b-icon icon="account-multiple-outline" aria-hidden="true" />
+					Users
+				</button>
 			</nav>
-		</header>
 
-		<nav class="settings-nav scrollbars-light" aria-label="Settings sections">
-			<button class="settings-nav-link" type="button"
-				:aria-current="activeSection === 'preferences-title' ? 'location' : undefined" @click="jumpToSection('preferences-title')">
-				<b-icon icon="tune-variant" aria-hidden="true" />
-				Preferences
-			</button>
-			<button class="settings-nav-link" type="button"
-				:aria-current="activeSection === 'account-title' ? 'location' : undefined" @click="jumpToSection('account-title')">
-				<b-icon icon="account-outline" aria-hidden="true" />
-				Your account
-			</button>
-			<button v-if="isAdmin" class="settings-nav-link" type="button"
-				:aria-current="activeSection === 'users-title' ? 'location' : undefined" @click="jumpToSection('users-title')">
-				<b-icon icon="account-multiple-outline" aria-hidden="true" />
-				Users
-			</button>
-		</nav>
-
-		<main class="settings-main scrollbars-light" aria-labelledby="settings-title" @focusin="selectFocusedSection">
-			<div class="settings-content">
-				<p v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</p>
-				<p v-if="notice" class="notification is-success is-light" role="status">{{ notice }}</p>
-				<section class="settings-section" aria-labelledby="preferences-title">
-					<h2 id="preferences-title" class="title is-3 mb-3" tabindex="-1">Preferences</h2>
-					<div class="settings-panel settings-pane">
-						<div class="settings-row preference-row">
-							<div>
-								<h3 id="appearance-title" class="setting_title">{{ $t('Appearance') }}</h3>
-								<p class="help settings-description">Choose how Files looks on this device.</p>
-							</div>
-							<div class="theme-options" role="radiogroup" aria-labelledby="appearance-title">
-								<label v-for="option in themeOptions" :key="option.value">
-									<input v-model="theme" class="is-sr-only" type="radio" name="files-theme" :value="option.value"
-										@change="setThemePreference(option.value)">
-									<span class="theme-choice">
-										<span class="theme-preview" :class="'theme-preview-' + option.value" aria-hidden="true"></span>
-										<span class="theme-label">
-											<span class="mdi" :class="option.icon" aria-hidden="true"></span>
-											{{ $t(option.label) }}
+			<div class="settings-main scrollbars-light" @focusin="selectFocusedSection">
+				<div class="settings-content">
+					<p v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</p>
+					<p v-if="notice" class="notification is-success is-light" role="status">{{ notice }}</p>
+					<section class="settings-section" aria-labelledby="preferences-title">
+						<h2 id="preferences-title" class="title is-3 mb-3" tabindex="-1">Preferences</h2>
+						<div class="settings-panel settings-pane">
+							<div class="settings-row preference-row">
+								<div>
+									<h3 id="appearance-title" class="setting_title">{{ $t('Appearance') }}</h3>
+									<p class="help settings-description">Choose how Files looks on this device.</p>
+								</div>
+								<div class="theme-options" role="radiogroup" aria-labelledby="appearance-title">
+									<label v-for="option in themeOptions" :key="option.value">
+										<input v-model="theme" class="is-sr-only" type="radio" name="files-theme" :value="option.value"
+											@change="setThemePreference(option.value)">
+										<span class="theme-choice">
+											<span class="theme-preview" :class="'theme-preview-' + option.value" aria-hidden="true"></span>
+											<span class="theme-label">
+												<span class="mdi" :class="option.icon" aria-hidden="true"></span>
+												{{ $t(option.label) }}
+											</span>
 										</span>
-									</span>
-								</label>
-							</div>
-						</div>
-						<div class="settings-row preference-row">
-							<div>
-								<h3 id="hidden-files-title" class="setting_title">{{ $t('Show hidden files') }}</h3>
-								<p class="help settings-description">Include items whose names start with a dot.</p>
-							</div>
-							<b-switch aria-labelledby="hidden-files-title" :model-value="store.state.showHiddenFiles"
-								@update:model-value="store.commit('SET_SHOW_HIDDEN_FILES', $event)" />
-						</div>
-					</div>
-				</section>
-				<section class="settings-section" aria-labelledby="account-title">
-					<h2 id="account-title" class="title is-3 mb-3" tabindex="-1">Your account</h2>
-					<div class="settings-panel">
-						<div class="settings-pane account-summary">
-							<span class="account-icon"><b-icon icon="account-outline" aria-hidden="true" /></span>
-							<strong>{{ user.username }}</strong>
-							<span class="tag is-rounded">{{ roleLabel(user.role) }}</span>
-						</div>
-						<div class="settings-columns">
-							<form class="settings-pane" @submit.prevent="changePassword">
-								<h3 class="setting_title mb-3">Change password</h3>
-								<input type="hidden" autocomplete="username" :value="user.username">
-								<label class="label" for="files-current-password">Current password</label>
-								<input id="files-current-password" v-model="currentPassword" class="input mb-3" type="password" autocomplete="current-password" required>
-								<label class="label" for="files-new-password">New password</label>
-								<input id="files-new-password" v-model="newPassword" class="input" type="password" autocomplete="new-password" minlength="12" required>
-								<p class="help settings-description mb-4">Use at least 12 characters.</p>
-								<button class="button is-primary" :disabled="busy" type="submit">Change password</button>
-							</form>
-							<div class="settings-pane">
-								<div class="settings-row factor-heading">
-									<h3 class="setting_title">Two-factor sign-in</h3>
-									<span class="tag is-rounded" :class="{ 'is-success is-light': user.totp_enabled }">{{ user.totp_enabled ? 'On' : 'Off' }}</span>
+									</label>
 								</div>
-								<TwoFactorPanel v-if="twoFactorOpen" @change="factorChanged" @done="twoFactorOpen = false" />
-								<button v-if="!twoFactorOpen" class="button" type="button" @click="twoFactorOpen = true">
-									{{ user.totp_enabled ? 'Manage two-factor sign-in' : 'Set up an authenticator app' }}
-								</button>
-								<button v-else class="button is-ghost mt-2" type="button" @click="twoFactorOpen = false">Close two-factor settings</button>
 							</div>
-						</div>
-					</div>
-				</section>
-				<section v-if="isAdmin" class="settings-section" aria-labelledby="users-title">
-					<h2 id="users-title" class="title is-3 mb-3" tabindex="-1">Users</h2>
-					<p class="help settings-description mb-4">All users can read and change files in the shared folder. Administrators can also manage accounts.</p>
-					<div class="settings-panel settings-columns">
-						<div class="settings-pane">
-							<h3 class="setting_title mb-3">User accounts</h3>
-							<p v-if="loadingUsers" role="status">Loading users…</p>
-							<button v-if="!loadingUsers && !users.length" class="button" type="button" @click="loadUsers">Reload users</button>
-							<ul>
-								<li v-for="account in users" :key="account.username" class="settings-row user-row">
-									<div>
-										<strong>{{ account.username }}{{ account.username === user.username ? ' (you)' : '' }}</strong>
-										<p class="help settings-description">{{ roleLabel(account.role) }} · Two-factor {{ account.totp_enabled ? 'on' : 'off' }}</p>
-									</div>
-									<button v-if="account.username !== user.username" class="button is-small" type="button"
-										:aria-label="`Manage ${account.username}`" :aria-expanded="selected?.username === account.username"
-										:disabled="busy" @click="selectAccount(account)">Manage</button>
-								</li>
-							</ul>
-						</div>
-						<form v-if="!selected" class="settings-pane" @submit.prevent="addUser">
-							<h3 class="setting_title mb-3">Add a user</h3>
-							<label class="label" for="files-add-username">Username</label>
-							<input id="files-add-username" v-model="newUser.username" class="input mb-3" autocomplete="off" autocapitalize="none" minlength="3" maxlength="40" required>
-							<label class="label" for="files-add-password">Password</label>
-							<input id="files-add-password" v-model="newUser.password" class="input mb-3" type="password" autocomplete="new-password" minlength="12" required>
-							<label class="label" for="files-add-role">Role</label>
-							<div class="select mb-4">
-								<select id="files-add-role" v-model="newUser.role">
-									<option value="member">Member</option>
-									<option value="admin">Administrator</option>
-								</select>
-							</div>
-							<div><button class="button is-primary" type="submit" :disabled="busy">Add user</button></div>
-						</form>
-						<div v-else class="settings-pane">
-							<h3 class="setting_title mb-3">Manage {{ selected.username }}</h3>
-							<template v-if="confirmAction">
-								<p v-if="confirmAction === 'remove'" class="mb-4">Remove {{ selected.username }} from Files?</p>
-								<p v-else class="mb-4">Turn off two-factor sign-in for {{ selected.username }}?</p>
-								<div class="buttons mb-0">
-									<button class="button is-danger" type="button" :disabled="busy" @click="confirmChange">
-										{{ confirmAction === 'remove' ? 'Remove user' : 'Turn off two-factor sign-in' }}
-									</button>
-									<button class="button" type="button" :disabled="busy" @click="confirmAction = ''">Cancel</button>
+							<div class="settings-row preference-row">
+								<div>
+									<h3 id="hidden-files-title" class="setting_title">{{ $t('Show hidden files') }}</h3>
+									<p class="help settings-description">Include items whose names start with a dot.</p>
 								</div>
-							</template>
-							<template v-else>
-								<form class="mb-4" @submit.prevent="resetPassword">
-									<label class="label" for="files-reset-password">New password</label>
-									<input id="files-reset-password" v-model="replacementPassword" class="input mb-3" type="password" autocomplete="new-password" minlength="12" required>
-									<button class="button is-primary" type="submit" :disabled="busy">Reset password</button>
+								<b-switch aria-labelledby="hidden-files-title" :model-value="store.state.showHiddenFiles"
+									@update:model-value="store.commit('SET_SHOW_HIDDEN_FILES', $event)" />
+							</div>
+						</div>
+					</section>
+					<section class="settings-section" aria-labelledby="account-title">
+						<h2 id="account-title" class="title is-3 mb-3" tabindex="-1">Your account</h2>
+						<div class="settings-panel">
+							<div class="settings-pane account-summary">
+								<span class="account-icon"><b-icon icon="account-outline" aria-hidden="true" /></span>
+								<strong>{{ user.username }}</strong>
+								<span class="tag is-rounded">{{ roleLabel(user.role) }}</span>
+							</div>
+							<div class="settings-columns">
+								<form class="settings-pane" @submit.prevent="changePassword">
+									<h3 class="setting_title mb-3">Change password</h3>
+									<input type="hidden" autocomplete="username" :value="user.username">
+									<label class="label" for="files-current-password">Current password</label>
+									<input id="files-current-password" v-model="currentPassword" class="input mb-3" type="password" autocomplete="current-password" required>
+									<label class="label" for="files-new-password">New password</label>
+									<input id="files-new-password" v-model="newPassword" class="input" type="password" autocomplete="new-password" minlength="12" required>
+									<p class="help settings-description mb-4">Use at least 12 characters.</p>
+									<button class="button is-primary" :disabled="busy" type="submit">Change password</button>
 								</form>
-								<div class="buttons mb-0">
-									<button v-if="selected.totp_enabled" class="button" type="button" :disabled="busy" @click="confirmAction = 'factor'">Reset two-factor sign-in</button>
-									<button class="button is-danger is-light" type="button" :disabled="busy" @click="confirmAction = 'remove'">Remove user</button>
-									<button class="button is-ghost" type="button" :disabled="busy" @click="selectAccount(null)">Done</button>
+								<div class="settings-pane">
+									<div class="settings-row factor-heading">
+										<h3 class="setting_title">Two-factor sign-in</h3>
+										<span class="tag is-rounded" :class="{ 'is-success is-light': user.totp_enabled }">{{ user.totp_enabled ? 'On' : 'Off' }}</span>
+									</div>
+									<TwoFactorPanel v-if="twoFactorOpen" @change="factorChanged" @done="twoFactorOpen = false" />
+									<button v-if="!twoFactorOpen" class="button" type="button" @click="twoFactorOpen = true">
+										{{ user.totp_enabled ? 'Manage two-factor sign-in' : 'Set up an authenticator app' }}
+									</button>
+									<button v-else class="button is-ghost mt-2" type="button" @click="twoFactorOpen = false">Close two-factor settings</button>
 								</div>
-							</template>
+							</div>
 						</div>
-					</div>
-				</section>
+					</section>
+					<section v-if="isAdmin" class="settings-section" aria-labelledby="users-title">
+						<h2 id="users-title" class="title is-3 mb-3" tabindex="-1">Users</h2>
+						<p class="help settings-description mb-4">All users can read and change files in the shared folder. Administrators can also manage accounts.</p>
+						<div class="settings-panel settings-columns">
+							<div class="settings-pane">
+								<h3 class="setting_title mb-3">User accounts</h3>
+								<p v-if="loadingUsers" role="status">Loading users…</p>
+								<button v-if="!loadingUsers && !users.length" class="button" type="button" @click="loadUsers">Reload users</button>
+								<ul>
+									<li v-for="account in users" :key="account.username" class="settings-row user-row">
+										<div>
+											<strong>{{ account.username }}{{ account.username === user.username ? ' (you)' : '' }}</strong>
+											<p class="help settings-description">{{ roleLabel(account.role) }} · Two-factor {{ account.totp_enabled ? 'on' : 'off' }}</p>
+										</div>
+										<button v-if="account.username !== user.username" class="button is-small" type="button"
+											:aria-label="`Manage ${account.username}`" :aria-expanded="selected?.username === account.username"
+											:disabled="busy" @click="selectAccount(account)">Manage</button>
+									</li>
+								</ul>
+							</div>
+							<form v-if="!selected" class="settings-pane" @submit.prevent="addUser">
+								<h3 class="setting_title mb-3">Add a user</h3>
+								<label class="label" for="files-add-username">Username</label>
+								<input id="files-add-username" v-model="newUser.username" class="input mb-3" autocomplete="off" autocapitalize="none" minlength="3" maxlength="40" required>
+								<label class="label" for="files-add-password">Password</label>
+								<input id="files-add-password" v-model="newUser.password" class="input mb-3" type="password" autocomplete="new-password" minlength="12" required>
+								<label class="label" for="files-add-role">Role</label>
+								<div class="select mb-4">
+									<select id="files-add-role" v-model="newUser.role">
+										<option value="member">Member</option>
+										<option value="admin">Administrator</option>
+									</select>
+								</div>
+								<div><button class="button is-primary" type="submit" :disabled="busy">Add user</button></div>
+							</form>
+							<div v-else class="settings-pane">
+								<h3 class="setting_title mb-3">Manage {{ selected.username }}</h3>
+								<template v-if="confirmAction">
+									<p v-if="confirmAction === 'remove'" class="mb-4">Remove {{ selected.username }} from Files?</p>
+									<p v-else class="mb-4">Turn off two-factor sign-in for {{ selected.username }}?</p>
+									<div class="buttons mb-0">
+										<button class="button is-danger" type="button" :disabled="busy" @click="confirmChange">
+											{{ confirmAction === 'remove' ? 'Remove user' : 'Turn off two-factor sign-in' }}
+										</button>
+										<button class="button" type="button" :disabled="busy" @click="confirmAction = ''">Cancel</button>
+									</div>
+								</template>
+								<template v-else>
+									<form class="mb-4" @submit.prevent="resetPassword">
+										<label class="label" for="files-reset-password">New password</label>
+										<input id="files-reset-password" v-model="replacementPassword" class="input mb-3" type="password" autocomplete="new-password" minlength="12" required>
+										<button class="button is-primary" type="submit" :disabled="busy">Reset password</button>
+									</form>
+									<div class="buttons mb-0">
+										<button v-if="selected.totp_enabled" class="button" type="button" :disabled="busy" @click="confirmAction = 'factor'">Reset two-factor sign-in</button>
+										<button class="button is-danger is-light" type="button" :disabled="busy" @click="confirmAction = 'remove'">Remove user</button>
+										<button class="button is-ghost" type="button" :disabled="busy" @click="selectAccount(null)">Done</button>
+									</div>
+								</template>
+							</div>
+						</div>
+					</section>
+				</div>
 			</div>
-		</main>
-	</div>
+		</div>
+	</dialog>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useStore } from 'vuex'
 import TwoFactorPanel from '@/components/account/TwoFactorPanel.vue'
 import { readThemePreference, setThemePreference } from '@/mixins/app/themePreference'
 import { filesAccountRequest } from '@/service/filesAccounts'
 
+const emit = defineEmits(['close'])
+const dialog = ref(null)
 const store = useStore()
 const user = computed(() => store.state.user)
 const isAdmin = computed(() => user.value.role === 'admin')
@@ -195,9 +195,11 @@ const notice = ref('')
 const roleLabel = role => role === 'admin' ? 'Administrator' : 'Member'
 
 onMounted(() => {
+	dialog.value.showModal()
 	if (isAdmin.value)
 		loadUsers()
 })
+onBeforeUnmount(() => dialog.value.close())
 
 function selectFocusedSection(event) {
 	const section = event.target.closest('.settings-section')
@@ -298,13 +300,32 @@ function factorChanged(value) {
 </script>
 
 <style scoped>
+.settings-dialog {
+	inset: 0;
+	width: min(64rem, calc(100% - 2rem));
+	height: min(46rem, calc(100dvh - 2rem));
+	max-width: none;
+	max-height: none;
+	margin: auto;
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var(--casa-border);
+	border-radius: 1rem;
+	background: var(--casa-surface);
+	box-shadow: 0 1rem 3rem rgb(0 0 0 / 24%);
+}
+
+.settings-dialog::backdrop {
+	background: rgb(0 0 0 / 55%);
+}
+
 .settings-page {
 	--settings-inset: clamp(0.875rem, 2vw, 1.25rem);
 	display: grid;
 	grid-template:
-		"sidebar header" auto
+		"header header" auto
 		"sidebar main" minmax(0, 1fr)
-		/ 15rem minmax(0, 1fr);
+		/ 11rem minmax(0, 1fr);
 	height: 100%;
 	background: var(--casa-surface-soft);
 	color: var(--casa-text);
@@ -312,23 +333,22 @@ function factorChanged(value) {
 
 .settings-header {
 	grid-area: header;
-	padding: 1rem 1.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.875rem 1.25rem;
 	border-bottom: 1px solid var(--casa-divider);
 	background: var(--casa-surface);
 }
 
-.settings-header .breadcrumb a {
-	color: var(--casa-text-hint);
-	border-radius: 4px;
+.settings-header .delete {
+	min-width: 2rem;
+	min-height: 2rem;
 }
 
-.settings-header .breadcrumb a:hover {
-	background: var(--casa-primary-tint);
-	color: var(--bulma-link);
-}
-
-.settings-header h1 {
-	margin-inline-start: 0.75rem;
+.settings-header .delete:focus-visible {
+	outline: 2px solid var(--bulma-link);
+	outline-offset: 2px;
 }
 
 .settings-nav {
@@ -380,8 +400,6 @@ function factorChanged(value) {
 }
 
 .settings-content {
-	max-width: 56rem;
-	margin-inline: auto;
 	font-size: 0.875rem;
 	overflow-wrap: anywhere;
 }
@@ -555,7 +573,12 @@ function factorChanged(value) {
 	white-space: normal;
 }
 
-@media (max-width: 48rem) {
+@media (max-width: 44rem) {
+	.settings-dialog {
+		width: calc(100% - 1rem);
+		height: calc(100dvh - 1rem);
+	}
+
 	.settings-page {
 		grid-template:
 			"header" auto
