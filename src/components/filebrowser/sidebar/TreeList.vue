@@ -12,7 +12,7 @@
 	<div ref="pinMenu" class="dropdown file-dropdown pin-menu" popover="auto">
 		<div class="dropdown-menu">
 			<div class="dropdown-content" role="menu" :aria-label="$t('Pinned')">
-				<button role="menuitem" type="button" class="dropdown-item" :disabled="unpinPending" autofocus @click="unpin">
+				<button ref="unpinButton" role="menuitem" type="button" class="dropdown-item" :disabled="unpinPending" @click="unpin">
 					{{ $t('Unpin') }}
 				</button>
 			</div>
@@ -170,6 +170,9 @@ export default {
 			menu.showPopover()
 			menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - menu.offsetWidth))}px`
 			menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - menu.offsetHeight))}px`
+			if (keyboard) {
+				this.$refs.unpinButton.focus({ preventScroll: true })
+			}
 		},
 
 		closePinMenu() {
@@ -223,6 +226,11 @@ export default {
 		display: block;
 		position: static;
 		padding: 0;
+	}
+
+	.dropdown-item:focus {
+		outline: 2px solid currentColor;
+		outline-offset: -2px;
 	}
 }
 </style>
