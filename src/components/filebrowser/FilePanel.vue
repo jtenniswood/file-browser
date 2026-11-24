@@ -114,10 +114,37 @@
 									<operation-status-bar v-if="!$standaloneFiles"></operation-status-bar>
 									<!-- Operation Status End -->
 
-									<!-- Upload Button Start -->
-									<global-action-button v-if="canChangeHere" @showNewFileModal="showNewFileModal"
-										@showNewFolderModal="showNewFolderModal"></global-action-button>
-									<!-- Upload Button End -->
+									<div v-if="allListData.length > 0" class="is-flex is-align-items-center is-flex-shrink-0">
+										<b-tooltip v-if="!$standaloneFiles" :label="showHiddenFilesLabel" position="is-left" type="is-dark">
+											<p :aria-label="showHiddenFilesLabel" :aria-pressed="showHiddenFiles"
+												class="is-clickable none-line-height mr-3" role="button" tabindex="0"
+												@keydown.enter.prevent="toggleHiddenFiles" @keydown.space.prevent="toggleHiddenFiles"
+												@click="toggleHiddenFiles">
+												<span aria-hidden="true" class="file-view-icon">{{ hiddenFilesIcon }}</span>
+											</p>
+										</b-tooltip>
+										<b-dropdown position="is-bottom-left" aria-role="menu" class="file-dropdown mr-3">
+											<template #trigger>
+												<b-tooltip :label="$t('Sort by')" position="is-left" type="is-dark">
+													<p :aria-label="$t('Sort by')" class="is-clickable none-line-height" role="button" tabindex="0">
+														<span aria-hidden="true" class="file-view-icon">sort</span>
+													</p>
+												</b-tooltip>
+											</template>
+											<b-dropdown-item v-for="option in sortOptions" :key="option.sort"
+												:aria-current="$store.state.sort === option.sort ? 'true' : null" aria-role="menuitem"
+												@click="pickSort(option.sort)">
+												{{ $t(option.text) }}
+												<span v-if="$store.state.sort === option.sort" class="ml-1">{{ $store.state.order === 'asc' ? '↑' : '↓' }}</span>
+											</b-dropdown-item>
+										</b-dropdown>
+										<b-tooltip :label="$t('Change View')" position="is-left" type="is-dark">
+											<p :aria-label="$t('Change View')" class="is-clickable none-line-height" role="button" tabindex="0"
+												@keydown.enter.prevent="changeView" @keydown.space.prevent="changeView" @click="changeView">
+												<span aria-hidden="true" class="file-view-icon">{{ viewIcon }}</span>
+											</p>
+										</b-tooltip>
+									</div>
 
 									<!--  Close Button Start -->
 									<div v-if="!$standaloneFiles"
@@ -149,37 +176,6 @@
 											}}
 										</b-checkbox>
 									</b-field>
-								</div>
-								<div class="view-btns is-flex-shrink-0">
-									<b-tooltip v-if="!$standaloneFiles" :label="showHiddenFilesLabel" position="is-left" type="is-dark">
-										<p :aria-label="showHiddenFilesLabel" :aria-pressed="showHiddenFiles"
-											class="is-clickable none-line-height mr-3" role="button" tabindex="0"
-											@keydown.enter.prevent="toggleHiddenFiles" @keydown.space.prevent="toggleHiddenFiles"
-											@click="toggleHiddenFiles">
-											<span aria-hidden="true" class="file-view-icon">{{ hiddenFilesIcon }}</span>
-										</p>
-									</b-tooltip>
-									<b-dropdown position="is-bottom-left" aria-role="menu" class="file-dropdown mr-3">
-										<template #trigger>
-											<b-tooltip :label="$t('Sort by')" position="is-left" type="is-dark">
-												<p :aria-label="$t('Sort by')" class="is-clickable none-line-height" role="button" tabindex="0">
-													<span aria-hidden="true" class="file-view-icon">sort</span>
-												</p>
-											</b-tooltip>
-										</template>
-											<b-dropdown-item v-for="option in sortOptions" :key="option.sort"
-												:aria-current="$store.state.sort === option.sort ? 'true' : null" aria-role="menuitem"
-												@click="pickSort(option.sort)">
-											{{ $t(option.text) }}
-											<span v-if="$store.state.sort === option.sort" class="ml-1">{{ $store.state.order === 'asc' ? '↑' : '↓' }}</span>
-										</b-dropdown-item>
-									</b-dropdown>
-									<b-tooltip :label="$t('Change View')" position="is-left" type="is-dark">
-										<p :aria-label="$t('Change View')" class="is-clickable none-line-height" role="button" tabindex="0"
-											@keydown.enter.prevent="changeView" @keydown.space.prevent="changeView" @click="changeView">
-											<span aria-hidden="true" class="file-view-icon">{{ viewIcon }}</span>
-										</p>
-									</b-tooltip>
 								</div>
 							</div>
 							<!-- Tool Bar End -->
@@ -305,7 +301,6 @@ import UploaderUnsupport from './uploader/components/unsupport.vue'
 import UploaderList from './uploader/components/list.vue'
 import OperationToolbar from './components/OperationToolbar.vue'
 import OperationStatusBar from './components/OperationStatusBar.vue'
-import GlobalActionButton from './components/GlobalActionButton.vue'
 import MountActionButton from './components/MountActionButton.vue'
 // storage settings requirement document
 import DropEntryButton from './drop/DropEntryButton.vue'
@@ -352,7 +347,6 @@ export default {
 		OperationToolbar,
 		RenameModal,
 		OperationStatusBar,
-		GlobalActionButton,
 		// Shared
 		ShareEntryButton,
 		ShareListPage,
