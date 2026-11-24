@@ -20,6 +20,12 @@
 					</select>
 				</div>
 			</section>
+			<section class="files-account-card settings-row" aria-labelledby="file-settings-title">
+				<h2 id="file-settings-title" class="title is-5 mb-0">{{ $t('Files') }}</h2>
+				<b-switch :model-value="store.state.showHiddenFiles" @update:model-value="store.commit('SET_SHOW_HIDDEN_FILES', $event)">
+					{{ $t('Show hidden files') }}
+				</b-switch>
+			</section>
 			<section class="files-account-card" aria-labelledby="account-title">
 				<h2 id="account-title" class="title is-5 mb-2">Your account</h2>
 				<p class="mb-5">{{ user.username }} · {{ roleLabel(user.role) }}</p>

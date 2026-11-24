@@ -141,7 +141,7 @@
 									</b-field>
 								</div>
 								<div class="view-btns is-flex-shrink-0">
-									<b-tooltip :label="showHiddenFilesLabel" position="is-left" type="is-dark">
+									<b-tooltip v-if="!$standaloneFiles" :label="showHiddenFilesLabel" position="is-left" type="is-dark">
 										<p :aria-label="showHiddenFilesLabel" :aria-pressed="showHiddenFiles"
 											class="is-clickable none-line-height mr-3" role="button" tabindex="0"
 											@keydown.enter.prevent="toggleHiddenFiles" @keydown.space.prevent="toggleHiddenFiles"
@@ -303,8 +303,6 @@ import { filterHiddenFiles, sortFiles } from '@/mixins/file_utils'
 import { mixin } from '@/mixins/mixin'
 import NewTabButton from '@/components/basicComponents/NewTabButton.vue'
 
-const SHOW_HIDDEN_FILES_STORAGE_KEY = 'casaos-filebrowser-show-hidden-files'
-
 export default {
 	name: 'file-panel',
 	mixins: [mixin, VueBreakpointMixin],
@@ -366,7 +364,6 @@ export default {
 			currentPath: '',
 			currentPathName: '',
 			isViewGird: true,
-			showHiddenFiles: localStorage.getItem(SHOW_HIDDEN_FILES_STORAGE_KEY) === 'true',
 			sortOptions: [
 				{ sort: 'name', text: 'File name' },
 				{ sort: 'date', text: 'Date Modified' },
@@ -451,6 +448,9 @@ export default {
 				? 'grid_view'
 				: 'format_list_bulleted'
 		},
+		showHiddenFiles() {
+			return this.$store.state.showHiddenFiles
+		},
 		hiddenFilesIcon() {
 			return this.showHiddenFiles ? 'visibility_off' : 'visibility'
 		},
@@ -473,6 +473,11 @@ export default {
 		},
 	},
 	watch: {
+		showHiddenFiles() {
+			this.clearSelection()
+			this.updateVisibleList()
+			this.handelListChange(this.listData)
+		},
 		'$store.state.access_token': {
 			handler(val) {
 				this.options.headers.Authorization = val
@@ -760,11 +765,7 @@ export default {
 		 * @return {*}
 		 */
 		toggleHiddenFiles() {
-			this.showHiddenFiles = !this.showHiddenFiles
-			localStorage.setItem(SHOW_HIDDEN_FILES_STORAGE_KEY, String(this.showHiddenFiles))
-			this.clearSelection()
-			this.updateVisibleList()
-			this.handelListChange(this.listData)
+			this.$store.commit('SET_SHOW_HIDDEN_FILES', !this.showHiddenFiles)
 		},
 
 		/**
