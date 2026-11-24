@@ -1,21 +1,19 @@
 <template>
-	<dialog ref="dialog" class="settings-dialog" aria-labelledby="settings-title" @cancel.prevent="emit('close')" @keydown.esc.stop>
-		<header class="settings-header">
-			<h1 id="settings-title" class="title is-4 mb-0">{{ $t('Settings') }}</h1>
-			<button class="delete is-medium" type="button" :aria-label="$t('Close')" autofocus @click="emit('close')"></button>
+	<dialog ref="dialog" class="modal-card settings-dialog" aria-labelledby="settings-title" @cancel.prevent="emit('close')" @keydown.esc.stop>
+		<header class="modal-card-head is-justify-content-space-between">
+			<h1 id="settings-title" class="title is-header mb-0">{{ $t('Settings') }}</h1>
+			<button class="close-button" type="button" :aria-label="$t('Close')" autofocus @click="emit('close')">
+				<b-icon icon="close-outline" pack="casa" aria-hidden="true" />
+			</button>
 		</header>
 
 		<b-tabs v-model="tab" :animated="false" :vertical="verticalTabs" class="settings-tabs" size="is-small">
-			<b-tab-item label="Preferences" value="preferences">
+			<b-tab-item class="modal-card-body" :icon="verticalTabs ? 'settings-outline' : undefined" icon-pack="casa" label="Preferences" value="preferences">
 				<div class="settings-row preference-row">
-					<h2 id="appearance-title" class="setting_title">{{ $t('Appearance') }}</h2>
-					<div class="theme-options" role="radiogroup" aria-labelledby="appearance-title">
-						<label v-for="option in themeOptions" :key="option.value">
-							<input v-model="theme" class="is-sr-only" type="radio" name="files-theme" :value="option.value"
-								@change="setThemePreference(option.value)">
-							<span class="button is-small">{{ $t(option.label) }}</span>
-						</label>
-					</div>
+					<label class="setting_title" for="files-theme">{{ $t('Appearance') }}</label>
+					<b-select id="files-theme" v-model="theme" :compat-fallthrough="false" @update:model-value="setThemePreference">
+						<option v-for="option in themeOptions" :key="option.value" :value="option.value">{{ $t(option.label) }}</option>
+					</b-select>
 				</div>
 				<div class="settings-row preference-row">
 					<div>
@@ -26,7 +24,7 @@
 						@update:model-value="store.commit('SET_SHOW_HIDDEN_FILES', $event)" />
 				</div>
 			</b-tab-item>
-			<b-tab-item label="Your account" value="account">
+			<b-tab-item class="modal-card-body" :icon="verticalTabs ? 'account-outline' : undefined" icon-pack="casa" label="Your account" value="account">
 				<div class="account-summary">
 					<strong>{{ user.username }}</strong>
 					<span class="tag is-rounded">{{ roleLabel(user.role) }}</span>
@@ -55,7 +53,7 @@
 					</div>
 				</div>
 			</b-tab-item>
-			<b-tab-item v-if="isAdmin" label="Users" value="users">
+			<b-tab-item v-if="isAdmin" class="modal-card-body" :icon="verticalTabs ? 'account-multiple-outline' : undefined" label="Users" value="users">
 				<p class="help settings-description mb-4">All users can read and change files in the shared folder. Administrators can also manage accounts.</p>
 				<div class="settings-columns">
 					<div>
@@ -254,41 +252,38 @@ function factorChanged(value) {
 <style scoped>
 .settings-dialog {
 	--settings-inset: clamp(1rem, 3vw, 1.5rem);
-	--settings-top: min(12dvh, 5rem);
+	position: fixed;
 	inset: 0;
 	width: min(49rem, calc(100% - 2rem));
 	max-width: none;
-	max-height: calc(100dvh - var(--settings-top) - 1rem);
-	margin: var(--settings-top) auto auto;
+	max-height: calc(100dvh - 2rem);
+	margin: auto;
 	padding: 0;
 	overflow: hidden;
 	border: 1px solid var(--casa-border);
-	border-radius: 0.875rem;
-	background: var(--casa-surface);
 	color: var(--casa-text);
-	box-shadow: 0 1rem 3rem rgb(0 0 0 / 24%);
 }
 
-.settings-dialog[open] {
-	display: flex;
-	flex-direction: column;
+.settings-dialog:not([open]) {
+	display: none;
 }
 
-.settings-dialog::backdrop {
-	background: rgb(0 0 0 / 55%);
+.settings-dialog .modal-card-head {
+	box-shadow: none;
 }
 
-.settings-header {
-	display: flex;
-	flex: none;
-	align-items: center;
-	justify-content: space-between;
-	padding: 0.875rem var(--settings-inset) 0.5rem;
+.settings-dialog .close-button {
+	border: 0;
+	background: transparent;
+	color: inherit;
 }
 
-.settings-header .delete:focus-visible,
-.settings-tabs :deep(.tabs a:focus-visible),
-.theme-options input:focus-visible + .button {
+.settings-dialog .close-button:hover {
+	background-color: var(--casa-hover-tint);
+}
+
+.settings-dialog .close-button:focus-visible,
+.settings-tabs :deep(.tabs a:focus-visible) {
 	outline: 2px solid var(--bulma-link);
 	outline-offset: 2px;
 }
@@ -308,26 +303,15 @@ function factorChanged(value) {
 
 .settings-tabs :deep(.tabs ul) {
 	padding-inline: var(--settings-inset);
-	border-bottom-color: var(--casa-divider);
-}
-
-.settings-tabs :deep(.tabs a) {
-	color: var(--casa-text-secondary);
-}
-
-.settings-tabs :deep(.tabs .is-active a),
-.settings-tabs :deep(.tabs a:hover) {
-	color: var(--casa-text);
 }
 
 .settings-tabs.is-vertical {
 	flex-direction: row;
 	flex-wrap: nowrap;
-	border-top: 1px solid var(--casa-divider);
 }
 
 .settings-tabs.is-vertical :deep(.tabs) {
-	width: 9.5rem;
+	width: 10rem;
 	overflow-y: auto;
 	border-inline-end: 1px solid var(--casa-divider);
 	background: var(--casa-surface-sunken);
@@ -335,15 +319,15 @@ function factorChanged(value) {
 
 .settings-tabs.is-vertical :deep(.tabs ul) {
 	gap: 0.25rem;
-	padding: 0.625rem;
+	padding: 0.75rem;
 	border-bottom: 0;
 }
 
 .settings-tabs.is-vertical :deep(.tabs a) {
 	margin: 0;
-	padding: 0.625rem;
+	padding: 0.625rem 0.75rem;
 	border-bottom: 0 !important;
-	border-radius: 0.375rem;
+	border-radius: 4px;
 	font-size: 0.875rem;
 }
 
@@ -407,21 +391,6 @@ function factorChanged(value) {
 	margin: 0;
 }
 
-.theme-options {
-	display: flex;
-	gap: 0.25rem;
-}
-
-.theme-options .button {
-	min-height: 2rem;
-}
-
-.theme-options input:checked + .button {
-	border-color: var(--bulma-link);
-	background: var(--casa-selected);
-	color: var(--casa-text-emphasis);
-}
-
 .account-summary {
 	flex-wrap: wrap;
 	margin-block-end: 1rem;
@@ -453,7 +422,6 @@ function factorChanged(value) {
 
 @media (max-width: 36rem) {
 	.settings-dialog {
-		--settings-top: 0.5rem;
 		width: calc(100% - 1rem);
 	}
 }
