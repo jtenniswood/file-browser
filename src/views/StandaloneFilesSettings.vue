@@ -10,26 +10,29 @@
 		</header>
 
 		<nav class="settings-nav scrollbars-light" aria-label="Settings sections">
-			<button class="settings-nav-link" type="button" @click="jumpToSection('preferences-title')">
+			<button class="settings-nav-link" type="button"
+				:aria-current="activeSection === 'preferences-title' ? 'location' : undefined" @click="jumpToSection('preferences-title')">
 				<b-icon icon="tune-variant" aria-hidden="true" />
 				Preferences
 			</button>
-			<button class="settings-nav-link" type="button" @click="jumpToSection('account-title')">
+			<button class="settings-nav-link" type="button"
+				:aria-current="activeSection === 'account-title' ? 'location' : undefined" @click="jumpToSection('account-title')">
 				<b-icon icon="account-outline" aria-hidden="true" />
 				Your account
 			</button>
-			<button v-if="isAdmin" class="settings-nav-link" type="button" @click="jumpToSection('users-title')">
+			<button v-if="isAdmin" class="settings-nav-link" type="button"
+				:aria-current="activeSection === 'users-title' ? 'location' : undefined" @click="jumpToSection('users-title')">
 				<b-icon icon="account-multiple-outline" aria-hidden="true" />
 				Users
 			</button>
 		</nav>
 
-		<main class="settings-main scrollbars-light" aria-labelledby="settings-title">
+		<main class="settings-main scrollbars-light" aria-labelledby="settings-title" @focusin="selectFocusedSection">
 			<div class="settings-content">
 				<p v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</p>
 				<p v-if="notice" class="notification is-success is-light" role="status">{{ notice }}</p>
 				<section class="settings-section" aria-labelledby="preferences-title">
-					<h2 id="preferences-title" class="title is-5 mb-3" tabindex="-1">Preferences</h2>
+					<h2 id="preferences-title" class="title is-3 mb-3" tabindex="-1">Preferences</h2>
 					<div class="settings-group">
 						<div class="settings-row preference-row">
 							<div>
@@ -40,9 +43,12 @@
 								<label v-for="option in themeOptions" :key="option.value">
 									<input v-model="theme" class="is-sr-only" type="radio" name="files-theme" :value="option.value"
 										@change="setThemePreference(option.value)">
-									<span class="button is-small">
-										<span class="icon" aria-hidden="true"><i class="mdi" :class="option.icon" /></span>
-										<span>{{ $t(option.label) }}</span>
+									<span class="theme-choice">
+										<span class="theme-preview" :class="'theme-preview-' + option.value" aria-hidden="true"></span>
+										<span class="theme-label">
+											<span class="mdi" :class="option.icon" aria-hidden="true"></span>
+											{{ $t(option.label) }}
+										</span>
 									</span>
 								</label>
 							</div>
@@ -58,10 +64,11 @@
 					</div>
 				</section>
 				<section class="settings-section" aria-labelledby="account-title">
-					<h2 id="account-title" class="title is-5 mb-3" tabindex="-1">Your account</h2>
-					<div class="account-summary">
+					<h2 id="account-title" class="title is-3 mb-3" tabindex="-1">Your account</h2>
+					<div class="settings-group account-summary">
+						<span class="account-icon"><b-icon icon="account-outline" aria-hidden="true" /></span>
 						<strong>{{ user.username }}</strong>
-						<span class="tag">{{ roleLabel(user.role) }}</span>
+						<span class="tag is-rounded">{{ roleLabel(user.role) }}</span>
 					</div>
 					<div class="settings-columns">
 						<form class="settings-group" @submit.prevent="changePassword">
@@ -77,7 +84,7 @@
 						<div class="settings-group">
 							<div class="settings-row factor-heading">
 								<h3 class="title is-6 mb-0">Two-factor sign-in</h3>
-								<span class="tag" :class="{ 'is-success is-light': user.totp_enabled }">{{ user.totp_enabled ? 'On' : 'Off' }}</span>
+								<span class="tag is-rounded" :class="{ 'is-success is-light': user.totp_enabled }">{{ user.totp_enabled ? 'On' : 'Off' }}</span>
 							</div>
 							<TwoFactorPanel v-if="twoFactorOpen" @change="factorChanged" @done="twoFactorOpen = false" />
 							<button v-if="!twoFactorOpen" class="button" type="button" @click="twoFactorOpen = true">
@@ -88,7 +95,7 @@
 					</div>
 				</section>
 				<section v-if="isAdmin" class="settings-section" aria-labelledby="users-title">
-					<h2 id="users-title" class="title is-5 mb-3" tabindex="-1">Users</h2>
+					<h2 id="users-title" class="title is-3 mb-3" tabindex="-1">Users</h2>
 					<p class="help settings-description mb-4">All users can read and change files in the shared folder. Administrators can also manage accounts.</p>
 					<div class="settings-columns">
 						<div class="settings-group">
@@ -164,6 +171,7 @@ import { filesAccountRequest } from '@/service/filesAccounts'
 const store = useStore()
 const user = computed(() => store.state.user)
 const isAdmin = computed(() => user.value.role === 'admin')
+const activeSection = ref('preferences-title')
 const theme = ref(readThemePreference(undefined, 'light'))
 const themeOptions = [
 	{ value: 'light', label: 'Light', icon: 'mdi-white-balance-sunny' },
@@ -188,6 +196,12 @@ onMounted(() => {
 	if (isAdmin.value)
 		loadUsers()
 })
+
+function selectFocusedSection(event) {
+	const section = event.target.closest('.settings-section')
+	if (section)
+		activeSection.value = section.getAttribute('aria-labelledby')
+}
 
 function jumpToSection(id) {
 	const heading = document.getElementById(id)
@@ -289,14 +303,15 @@ function factorChanged(value) {
 		"sidebar main" minmax(0, 1fr)
 		/ 15rem minmax(0, 1fr);
 	height: 100%;
-	background: var(--casa-surface);
+	background: var(--casa-surface-soft);
 	color: var(--casa-text);
 }
 
 .settings-header {
 	grid-area: header;
 	padding: 1rem 1.5rem;
-	border-bottom: 1px solid var(--casa-divider-soft);
+	border-bottom: 1px solid var(--casa-divider);
+	background: var(--casa-surface);
 }
 
 .settings-header .breadcrumb a {
@@ -319,7 +334,8 @@ function factorChanged(value) {
 	flex-direction: column;
 	gap: 0.25rem;
 	overflow-y: auto;
-	padding: 1rem 0.75rem;
+	padding: 1.25rem 0.75rem;
+	border-inline-end: 1px solid var(--casa-divider);
 	background: var(--casa-surface-sunken);
 }
 
@@ -330,7 +346,7 @@ function factorChanged(value) {
 	gap: 0.5rem;
 	padding: 0.625rem 0.75rem;
 	border: 0;
-	border-radius: 4px;
+	border-radius: 0.5rem;
 	background: transparent;
 	color: inherit;
 	font: inherit;
@@ -343,26 +359,36 @@ function factorChanged(value) {
 	background: var(--casa-hover-sunken);
 }
 
+.settings-nav-link[aria-current] {
+	background: var(--casa-selected);
+	color: var(--casa-text-emphasis);
+	font-weight: 600;
+}
+
+.settings-nav-link:focus-visible {
+	outline: 2px solid var(--bulma-link);
+	outline-offset: -2px;
+}
+
 .settings-main {
 	grid-area: main;
 	overflow-y: auto;
-	padding: 1.5rem;
+	padding: clamp(1.25rem, 3vw, 2rem);
 }
 
 .settings-content {
-	max-width: 52rem;
+	max-width: 56rem;
+	margin-inline: auto;
 	font-size: 0.875rem;
 	overflow-wrap: anywhere;
 }
 
 .settings-section + .settings-section {
-	margin-block-start: 1.5rem;
-	padding-block-start: 1.5rem;
-	border-top: 1px solid var(--casa-divider-soft);
+	margin-block-start: 2rem;
 }
 
 .settings-section > .title {
-	scroll-margin-block-start: 1.5rem;
+	scroll-margin-block-start: 1.25rem;
 }
 
 .settings-description {
@@ -373,7 +399,7 @@ function factorChanged(value) {
 .account-summary {
 	display: flex;
 	align-items: center;
-	gap: 0.75rem;
+	gap: 0.75rem 1rem;
 }
 
 .settings-row {
@@ -382,12 +408,12 @@ function factorChanged(value) {
 
 .preference-row + .preference-row,
 .user-row + .user-row {
-	border-top: 1px solid var(--casa-divider-soft);
+	border-top: 1px solid var(--casa-divider);
 }
 
 .preference-row,
 .user-row {
-	padding-block: 0.75rem;
+	padding-block: 0.875rem;
 }
 
 .preference-row:first-child {
@@ -406,24 +432,94 @@ function factorChanged(value) {
 }
 
 .theme-options {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.25rem;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.5rem;
+	inline-size: min(100%, 18rem);
 }
 
-.theme-options input:checked + .button {
-	background-color: var(--casa-selected);
-	color: var(--casa-text-emphasis);
+.theme-choice {
+	display: grid;
+	gap: 0.35rem;
+	padding: 0.375rem;
+	border: 1px solid var(--casa-border);
+	border-radius: 0.5rem;
+	background: var(--casa-surface);
+	text-align: center;
+	cursor: pointer;
 }
 
-.theme-options input:focus-visible + .button {
+.theme-choice:hover {
+	border-color: var(--casa-border-strong);
+}
+
+.theme-options input:checked + .theme-choice {
+	border-color: var(--bulma-link);
+	background: var(--casa-selected);
+}
+
+.theme-options input:focus-visible + .theme-choice {
 	outline: 2px solid var(--bulma-link);
 	outline-offset: 2px;
 }
 
+.theme-preview {
+	--preview-sidebar: #e2e8f0;
+	--preview-surface: #f8fafc;
+	--preview-line: #94a3b8;
+	position: relative;
+	display: block;
+	block-size: 2.25rem;
+	overflow: hidden;
+	border: 1px solid var(--casa-border);
+	border-radius: 0.3rem;
+	background: linear-gradient(to right, var(--preview-sidebar) 28%, var(--preview-surface) 28%);
+}
+
+.theme-preview::after {
+	position: absolute;
+	inset: 0.55rem 16% auto 40%;
+	block-size: 0.2rem;
+	border-radius: 1rem;
+	background: #2476f3;
+	box-shadow: 0 0.46rem var(--preview-line), 0 0.92rem var(--preview-line);
+	content: '';
+}
+
+.theme-preview-dark {
+	--preview-sidebar: #17181a;
+	--preview-surface: #2a2b2f;
+	--preview-line: #717783;
+}
+
+.theme-preview-system {
+	--preview-line: #818d9e;
+	background: linear-gradient(to right, #e2e8f0 28%, #f8fafc 28% 50%, #2a2b2f 50%);
+}
+
+.theme-label {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 0.25rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+}
+
 .account-summary {
 	flex-wrap: wrap;
-	margin-block-end: 1rem;
+	margin-block-end: 0.875rem;
+}
+
+.account-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	inline-size: 2.5rem;
+	block-size: 2.5rem;
+	border-radius: 0.625rem;
+	background: var(--casa-selected);
+	color: var(--casa-text-emphasis);
 }
 
 .factor-heading {
@@ -433,12 +529,17 @@ function factorChanged(value) {
 .settings-columns {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
-	gap: 1.25rem 2rem;
+	gap: 0.875rem;
 	align-items: start;
 }
 
 .settings-group {
 	min-width: 0;
+	padding: clamp(0.875rem, 2vw, 1.25rem);
+	border: 1px solid var(--casa-border);
+	border-radius: 0.75rem;
+	background: var(--casa-surface);
+	box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
 }
 
 .settings-group :deep(.button) {
@@ -464,7 +565,9 @@ function factorChanged(value) {
 	.settings-nav {
 		flex-direction: row;
 		flex-wrap: wrap;
-		padding: 0.25rem 0.5rem;
+		padding: 0.5rem;
+		border-inline-end: 0;
+		border-bottom: 1px solid var(--casa-divider);
 	}
 
 	.settings-nav-link {
