@@ -64,6 +64,10 @@
 					<b-dropdown-item v-if="showSingleEdit" key="file-context-star" aria-role="menuitem" @click="toggleStar">
 						{{ isStarred ? $t('Remove from Starred') : $t('Add to Starred') }}
 					</b-dropdown-item>
+					<b-dropdown-item v-if="$standaloneFiles && showSingleEdit && item.is_dir && filePanel.canChangeHere"
+						aria-role="menuitem" @click="changeFolderIcon">
+						{{ $t('Change folder icon') }}
+					</b-dropdown-item>
 					<hr class="dropdown-divider">
 					<b-dropdown-item v-if="showSingleEdit && !isShared && !isMounted && filePanel.canChangeHere" key="file-context3"
 						aria-role="menuitem" @click="rename">
@@ -173,9 +177,9 @@ export default {
 	},
 	methods: {
 		open(event, item) {
-			this.item = item
-			const bounced = event.target.getAttribute('class').includes('dropdown-menu')
+			const bounced = event.target.closest('.dropdown-menu')
 			if (!bounced) {
+				this.item = item
 				this.showDetail = (item != undefined)
 				if (this.showDetail) {
 					const isInSelected = this.filePanel.selectedArray.some((obj) => {
@@ -217,6 +221,10 @@ export default {
 		rename() {
 			this.$refs.dropDown.toggle()
 			this.filePanel.showRenameModal(this.item)
+		},
+		changeFolderIcon() {
+			this.$refs.dropDown.toggle()
+			this.filePanel.showFolderIconModal(this.item)
 		},
 
 		// Paste File

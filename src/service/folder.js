@@ -25,6 +25,9 @@ const folder = {
 			path,
 		})
 	},
+	setIcon(path, icon) {
+		return api.put(`${PREFIX}/icon`, { path, icon })
+	},
 
 	// rename folder
 	rename(old_path, new_path) {

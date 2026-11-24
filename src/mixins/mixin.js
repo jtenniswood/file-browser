@@ -5,6 +5,7 @@ import union from 'lodash/union'
 import copy from 'clipboard-copy'
 import { renderSize } from './file_utils'
 import { automaticFolderIcon } from '@/components/filebrowser/automaticFolderIcon'
+import { customFolderIcon } from '@/components/filebrowser/folderIcons'
 
 const typeMap = {
 	'image-x-generic': ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff'],
@@ -88,6 +89,9 @@ export const mixin = {
 			const isDir = (has(item, 'is_dir') || has(item, 'isFolder')) ? item.is_dir : false
 			let icon = 'unknown'
 			if (isDir) {
+				const custom = customFolderIcon(item.folder_icon)
+				if (custom)
+					return custom
 				icon = `folder-${automaticFolderIcon(item)}`
 			} else {
 				const ext = this.getFileExt(item)

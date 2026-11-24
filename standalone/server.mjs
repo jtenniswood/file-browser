@@ -281,6 +281,11 @@ export async function createFilesServer({
 				case 'POST /v1/folder':
 					await store.create((await bodyOf(request))?.path, pathname === '/v1/folder')
 					break
+				case 'PUT /v1/folder/icon': {
+					const body = await bodyOf(request, 4096)
+					await store.setFolderIcon(body?.path, body?.icon)
+					break
+				}
 				case 'PUT /v1/file/name':
 				case 'PUT /v1/folder/name': {
 					const body = await bodyOf(request)

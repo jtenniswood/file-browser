@@ -104,6 +104,47 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.equal((await request('/v1/file/trash')).status, 404)
 })
 
+it('saves a folder icon across renames, moves and server restarts', async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-folder-icon-'))
+	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
+	const assetsDirectory = join(directory, 'assets')
+	const dataDirectory = join(directory, 'data')
+	await mkdir(assetsDirectory)
+	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
+	await mkdir(join(dataDirectory, 'Projects', 'Music.svg'), { recursive: true })
+	await writeFile(join(dataDirectory, 'file.txt'), 'file')
+	const options = { assetsDirectory, directory: dataDirectory }
+	const { server, origin } = await startServer(options, t)
+	const iconRoute = '/v1/folder/icon'
+	const musicPath = '/DATA/Projects/Music.svg'
+	const setIcon = (origin, cookie, path, icon) => submit(origin, iconRoute, { path, icon }, cookie, 'PUT')
+	const list = async (origin, cookie, path) => {
+		const response = await apiRequest(origin, `/v1/folder?${new URLSearchParams({ path })}`, { cookie })
+		return (await response.json()).data.content
+	}
+
+	assert.equal((await setIcon(origin, undefined, musicPath, 'music')).status, 401)
+	const cookie = cookieOf(await submit(origin, '/v1/auth/setup', account))
+	assert.equal((await setIcon(origin, cookie, '/DATA/file.txt', 'music')).status, 400)
+	assert.equal((await setIcon(origin, cookie, musicPath, 'toString')).status, 400)
+	assert.equal((await setIcon(origin, cookie, musicPath, 'music')).status, 200)
+	assert.equal((await setIcon(origin, cookie, '/DATA/Projects', 'projects')).status, 200)
+
+	assert.equal((await submit(origin, '/v1/folder/name', { old_path: '/DATA/Projects', new_path: '/DATA/Work' }, cookie, 'PUT')).status, 200)
+	assert.equal((await submit(origin, '/v1/batch/task', { item: [{ from: musicPath.replace('Projects', 'Work') }], type: 'move', to: '/DATA' }, cookie)).status, 200)
+	const movedPath = '/DATA/Music.svg'
+	assert.equal((await list(origin, cookie, '/DATA')).find(item => item.path === movedPath).folder_icon, 'music')
+	await new Promise(resolve => server.close(resolve))
+
+	const restarted = await startServer(options, t)
+	const secondCookie = cookieOf(await submit(restarted.origin, '/v1/auth/login', account))
+	const saved = await list(restarted.origin, secondCookie, '/DATA')
+	assert.equal(saved.find(item => item.path === movedPath).folder_icon, 'music')
+	assert.equal(saved.find(item => item.path === '/DATA/Work').folder_icon, 'projects')
+	assert.equal((await setIcon(restarted.origin, secondCookie, movedPath, null)).status, 200)
+	assert.equal((await list(restarted.origin, secondCookie, '/DATA')).find(item => item.path === movedPath).folder_icon, undefined)
+}, 20000)
+
 const networkAddress = '192.168.1.50'
 const proxyHost = 'files.example.test'
 

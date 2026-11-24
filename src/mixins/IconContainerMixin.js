@@ -20,7 +20,7 @@ export default {
 			return extensions?.samba_shared === true || extensions?.share?.shared === 'true'
 		},
 		isSvg() {
-			return this.getFileExt(this.item) === 'svg'
+			return !this.item.is_dir && this.getFileExt(this.item) === 'svg'
 		},
 	},
 	watch: {
