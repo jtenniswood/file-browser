@@ -2,9 +2,13 @@ import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { constants, createWriteStream } from 'node:fs'
 import { access, chmod, cp, link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { basename, dirname, join, relative, sep } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+
+const require = createRequire(import.meta.url)
+const folderIconLabels = require('../src/assets/img/filebrowser/folder-icons.json')
 
 export const rootPath = '/DATA'
 const stateName = '.files-state'
@@ -56,6 +60,11 @@ function fileDescription(path, stat) {
 	}
 }
 
+// A folder keeps its identity when renamed, moved or restored from the trash.
+function folderIdentity({ dev, ino, birthtimeMs }) {
+	return `${dev}:${ino}:${birthtimeMs}`
+}
+
 async function inspectTree(path) {
 	const stat = await lstat(path)
 	if (!isSupported(stat))
@@ -86,6 +95,15 @@ export async function openStorage(directory) {
 		// A process that stopped mid-upload can leave an uncommitted staging directory.
 		if (name.startsWith('temp-'))
 			await rm(join(state, name), { recursive: true, force: true })
+	}
+
+	const folderIconsFile = join(state, 'folder-icons.json')
+	let folderIcons = await optionalStat(folderIconsFile)
+		? JSON.parse(await readFile(folderIconsFile, 'utf8'))
+		: {}
+
+	function folderIcon(stat) {
+		return stat.isDirectory() ? folderIcons[folderIdentity(stat)] : undefined
 	}
 
 	async function locate(path, { requireEntry = true, allowRoot = true } = {}) {
@@ -128,8 +146,10 @@ export async function openStorage(directory) {
 					continue
 				throw error
 			}
-			if (child && isSupported(child))
-				content.push(fileDescription(`${path}/${name}`, child))
+			if (child && isSupported(child)) {
+				const icon = folderIcon(child)
+				content.push({ ...fileDescription(`${path}/${name}`, child), ...(icon && { folder_icon: icon }) })
+			}
 		}
 		return { content }
 	}
@@ -251,7 +271,8 @@ export async function openStorage(directory) {
 				await rm(directory, { recursive: true, force: true })
 				continue
 			}
-			rows.push({ ...entry, name, trash: 'local', size: item.size })
+			const icon = folderIcon(item)
+			rows.push({ ...entry, name, trash: 'local', size: item.size, ...(icon && { folder_icon: icon }) })
 		}
 		return rows
 	}
@@ -331,6 +352,24 @@ export async function openStorage(directory) {
 				await mkdir(target)
 			else
 				await writeFile(target, '', { flag: 'wx' })
+		}),
+		setFolderIcon: (path, icon) => change(async () => {
+			if (icon !== null && (typeof icon !== 'string' || !Object.hasOwn(folderIconLabels, icon)))
+				throw new RequestError(400, 'Choose a folder icon from the list.')
+			const { stat } = await locate(path, { allowRoot: false })
+			if (!stat.isDirectory())
+				throw new RequestError(400, 'Choose a folder.')
+			const key = folderIdentity(stat)
+			const updated = { ...folderIcons }
+			if (icon === null)
+				delete updated[key]
+			else
+				updated[key] = icon
+			await staged(async (temporary) => {
+				await writeFile(temporary, JSON.stringify(updated), { mode: 0o600 })
+				await rename(temporary, folderIconsFile)
+			})
+			folderIcons = updated
 		}),
 		rename: (oldPath, newPath) => change(async () => {
 			const { target } = await locate(oldPath, { allowRoot: false })

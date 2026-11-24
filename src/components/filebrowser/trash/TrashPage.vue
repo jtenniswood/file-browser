@@ -40,7 +40,7 @@
 						<div class="tr trash-row" role="row">
 							<div class="td" role="cell">
 								<div class="cover">
-									<img :src="getIconFile({ name, is_dir: row.is_dir })" alt="">
+									<img :src="getIconFile({ name, is_dir: row.is_dir, folder_icon: row.folder_icon })" alt="">
 								</div>
 								<div class="trash-name">
 									<div :title="name" class="one-line">{{ name }}</div>

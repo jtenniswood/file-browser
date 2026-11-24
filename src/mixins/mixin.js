@@ -4,6 +4,7 @@ import escape from 'lodash/escape'
 import union from 'lodash/union'
 import copy from 'clipboard-copy'
 import { renderSize } from './file_utils'
+import { customFolderIcon } from '@/components/filebrowser/folderIcons'
 
 // the core's answer when an item cannot go to the trash (common_err.TRASH_UNAVAILABLE)
 const TRASH_UNAVAILABLE = 60007
@@ -90,6 +91,9 @@ export const mixin = {
 			const isDir = (has(item, 'is_dir') || has(item, 'isFolder')) ? item.is_dir : false
 			let icon = 'unknown'
 			if (isDir) {
+				const custom = customFolderIcon(item.folder_icon)
+				if (custom)
+					return custom
 				if (item.type == 'application') {
 					icon = 'folder-application'
 				} else if (item.type == 'usb') {

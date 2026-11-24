@@ -5,7 +5,8 @@
 			class="is-flex list-item new-list-item" @click="open(item.path)">
 			<div class="cover mr-2 is-flex-shrink-0 is-relative is-flex is-align-items-center">
 				<template v-if="item.icon !== 'danger'">
-					<b-icon v-if="isIconFont" :class="iconColor" :icon="item.icon" :pack="item.pack"
+					<img v-if="folderIcon" :src="folderIcon" width="24" height="24" alt="">
+					<b-icon v-else-if="isIconFont" :class="iconColor" :icon="item.icon" :pack="item.pack"
 						custom-size="casa-24px"></b-icon>
 					<div v-else class="img-container">
 						<b-image :src="item.icon" class="is-24x24"></b-image>
@@ -29,6 +30,7 @@
 </template>
 
 <script>
+import { customFolderIcon } from '../folderIcons'
 import { parentOf } from './starred.js'
 
 export default {
@@ -74,6 +76,9 @@ export default {
 		return {}
 	},
 	computed: {
+		folderIcon() {
+			return customFolderIcon(this.item.entry?.folder_icon)
+		},
 		isActived() {
 			if (!this.isActive) {
 				return false

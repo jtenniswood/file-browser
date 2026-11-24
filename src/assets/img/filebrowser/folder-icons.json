@@ -1,0 +1,17 @@
+{
+  "default": "Plain folder",
+  "documents": "Documents",
+  "download": "Downloads",
+  "pictures": "Pictures",
+  "video": "Videos",
+  "application": "Applications",
+  "music": "Music",
+  "code": "Code",
+  "projects": "Projects",
+  "games": "Games",
+  "books": "Books",
+  "archive": "Archive",
+  "cloud": "Cloud",
+  "backup": "Backups",
+  "favorites": "Favorites"
+}

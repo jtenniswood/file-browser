@@ -283,6 +283,7 @@ import DetailModal from './modals/DetailModal.vue'
 import NewFolderModal from './modals/NewFolderModal.vue'
 import NewFileModal from './modals/NewFileModal.vue'
 import RenameModal from './modals/RenameModal.vue'
+import FolderIconModal from './modals/FolderIconModal.vue'
 
 import Uploader from './uploader/components/uploader.vue'
 import UploaderUnsupport from './uploader/components/unsupport.vue'
@@ -681,6 +682,7 @@ export default {
 								size: item.size,
 								write: item.write,
 								extensions: item.extensions,
+								folder_icon: item.folder_icon,
 							}
 						})
 						this.updateVisibleList()
@@ -1062,6 +1064,31 @@ export default {
 				},
 				props: {
 					item,
+				},
+			})
+		},
+
+		showFolderIconModal(item) {
+			this.isModalOpen = true
+			this.$buefy.modal.open({
+				component: FolderIconModal,
+				hasModalCard: true,
+				trapFocus: true,
+				canCancel: ['escape'],
+				ariaRole: 'dialog',
+				ariaModal: true,
+				ariaLabel: this.$t('Change folder icon'),
+				scroll: 'keep',
+				animation: 'zoom-in',
+				props: { item },
+				onClose: () => {
+					this.isModalOpen = false
+				},
+				events: {
+					save: (icon) => {
+						item.folder_icon = icon
+						this.$EventBus.$emit(events.RELOAD_FILE_LIST)
+					},
 				},
 			})
 		},

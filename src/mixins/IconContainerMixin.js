@@ -30,7 +30,7 @@ export default {
 			}
 		},
 		isSvg() {
-			return this.getFileExt(this.item) === 'svg'
+			return !this.item.is_dir && this.getFileExt(this.item) === 'svg'
 		},
 	},
 	watch: {
