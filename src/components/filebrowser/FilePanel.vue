@@ -346,6 +346,7 @@ export default {
 		ExcelViewer: defineAsyncComponent(() => import('./viewers/ExcelViewer.vue')),
 		PdfViewer: defineAsyncComponent(() => import('./viewers/PdfViewer.vue')),
 		StlViewer: defineAsyncComponent(() => import('./viewers/StlViewer.vue')),
+		PsdViewer: defineAsyncComponent(() => import('./viewers/PsdViewer.vue')),
 		EmptyHolder,
 		ErrorHolder,
 		OperationToolbar,

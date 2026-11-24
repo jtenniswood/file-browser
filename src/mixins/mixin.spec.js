@@ -20,6 +20,14 @@ describe('getPanelType', () => {
 		expect(panelOf(name)).toBe('stl-viewer')
 	})
 
+	it.each(['design.psd', 'design.PSD'])('opens %s in the Photoshop viewer', (name) => {
+		expect(panelOf(name)).toBe('psd-viewer')
+	})
+
+	it('keeps large Photoshop document format on the download path', () => {
+		expect(panelOf('design.psb')).toBeNull()
+	})
+
 	it('offers no panel for a binary it does not know', () => {
 		expect(panelOf('firmware.bin')).toBeNull()
 	})
