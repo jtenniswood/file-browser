@@ -7,9 +7,9 @@
 			@drop="filePanel.dropFiles($event, item)">
 			<div class="cover mr-2 is-flex-shrink-0 is-relative is-flex is-align-items-center">
 				<template v-if="item.icon !== 'danger'">
-					<img v-if="folderIcon" :src="folderIcon" width="24" height="24" alt="">
-					<b-icon v-else-if="isIconFont" :class="iconColor" :icon="item.icon" :pack="item.pack"
-						custom-size="casa-24px"></b-icon>
+					<b-icon v-if="folderIcon || isIconFont" :class="iconColor" :icon="folderIcon?.icon ?? item.icon"
+						:pack="folderIcon?.pack ?? item.pack"
+						:custom-size="folderIcon?.pack === 'mdi' ? 'mdi-24px' : 'casa-24px'"></b-icon>
 					<div v-else class="img-container">
 						<b-image :src="item.icon" class="is-24x24"></b-image>
 					</div>
@@ -29,8 +29,7 @@
 </template>
 
 <script>
-import { customFolderIcon } from '../folderIcons'
-import { parentOf } from './starred.js'
+import { parentOf, pinnedFolderIcon } from './starred.js'
 
 export default {
 	inject: ['filePanel'],
@@ -70,7 +69,7 @@ export default {
 	},
 	computed: {
 		folderIcon() {
-			return customFolderIcon(this.item.entry?.folder_icon)
+			return pinnedFolderIcon(this.item.entry?.folder_icon)
 		},
 		isActived() {
 			if (!this.isActive) {
