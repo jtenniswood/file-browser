@@ -34,10 +34,17 @@
 						<div v-for="(item, index) in listData" :key="`list-${index}${item.name}`" :data-rel="index"
 							class="tr-wrapper rdata">
 							<div :class="{
-									isCutting: getCardState(item),
-									active: item.isSelected,
-								}" class="tr is-unselectable" @click="onCardClick($event, item, index)"
-								@contextmenu.prevent="openContextMenu($event, item)" @mousedown.stop="">
+									'isCutting': getCardState(item),
+									'active': item.isSelected,
+									'file-move-target': filePanel?.moveTarget === item.path,
+								}"
+								:draggable="filePanel?.canDragFile(item)" class="tr is-unselectable" @click="onCardClick($event, item, index)"
+								@contextmenu.prevent="openContextMenu($event, item)"
+								@dragend="filePanel?.clearFileDrag()"
+								@dragleave="filePanel?.leaveMoveTarget($event, item.path)"
+								@dragover="filePanel?.showMoveTarget($event, item)"
+								@dragstart="filePanel?.startFileDrag($event, item)"
+								@drop="filePanel?.dropFiles($event, item)" @mousedown.stop="">
 								<div class="td is-flex is-flex-direction-column justify-content-center">
 									<!-- CheckBox Start -->
 									<b-field :class="{ show: isMobile || item.isSelected }"

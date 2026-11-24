@@ -261,6 +261,7 @@ import { defineAsyncComponent } from 'vue'
 import dropRight from 'lodash/dropRight'
 import escape from 'lodash/escape'
 
+import { parentOf } from './sidebar/starred.js'
 import TreeList from './sidebar/TreeList.vue'
 import MountList from './sidebar/MountList.vue'
 import StandaloneMountList from './sidebar/StandaloneMountList.vue'
@@ -301,6 +302,8 @@ import VueBreakpointMixin from '@/mixins/breakpoint'
 import { filterHiddenFiles, sortFiles } from '@/mixins/file_utils'
 import { mixin } from '@/mixins/mixin'
 import NewTabButton from '@/components/basicComponents/NewTabButton.vue'
+
+const fileMoveDragType = 'application/x-files-move'
 
 export default {
 	name: 'file-panel',
@@ -349,6 +352,9 @@ export default {
 			isLoading: true,
 			isModalOpen: false,
 			isDragIn: false,
+			draggedFiles: [],
+			moveTarget: null,
+			isMovingFiles: false,
 			isPasting: false,
 			isShowDetial: false,
 			isSideBarOpen: false,
@@ -656,6 +662,7 @@ export default {
 		 * @return {*}
 		 */
 		getFileList(path) {
+			this.clearFileDrag()
 			this.isLoading = true
 			// path = path.replace("//", "/")
 			this.pageType = 'file'
@@ -831,6 +838,72 @@ export default {
 			this.getFileList(newPath)
 		},
 
+		canDragFile(item) {
+			return this.$standaloneFiles && !this.isLoading && !this.isMovingFiles && this.canChangeHere
+				&& item.write !== false && !this.mountPoints.includes(item.path)
+		},
+
+		startFileDrag(event, item) {
+			if (!this.$standaloneFiles)
+				return
+			const items = item.isSelected && this.selectedArray.length ? this.selectedArray : [item]
+			if (!items.every(entry => this.canDragFile(entry))) {
+				event.preventDefault()
+				return
+			}
+			event.dataTransfer.clearData()
+			event.dataTransfer.setData(fileMoveDragType, 'move')
+			event.dataTransfer.effectAllowed = 'move'
+			this.draggedFiles = items
+		},
+
+		clearFileDrag() {
+			this.draggedFiles = []
+			this.moveTarget = null
+		},
+
+		canDropFiles(event, target) {
+			return this.draggedFiles.length > 0 && event.dataTransfer.types.includes(fileMoveDragType)
+				&& target.is_dir !== false && target.type !== 'file' && !target.unavailable
+				&& target.write !== false && target.entry?.write !== false && canChangeIn(target.path, this.accountFolders)
+				&& this.draggedFiles.every(({ path }) => target.path !== parentOf(path)
+					&& target.path !== path && !target.path.startsWith(`${path}/`))
+		},
+
+		showMoveTarget(event, target) {
+			if (!this.canDropFiles(event, target))
+				return
+			event.preventDefault()
+			event.stopPropagation()
+			event.dataTransfer.dropEffect = 'move'
+			this.moveTarget = target.path
+		},
+
+		leaveMoveTarget(event, path) {
+			if (this.moveTarget === path && !event.currentTarget.contains(event.relatedTarget))
+				this.moveTarget = null
+		},
+
+		async dropFiles(event, target) {
+			if (!this.canDropFiles(event, target))
+				return
+			event.preventDefault()
+			event.stopPropagation()
+			const item = this.draggedFiles.map(file => ({ from: file.path }))
+			this.clearFileDrag()
+			this.isMovingFiles = true
+			try {
+				const { data } = await this.$api.batch.task({ type: 'move', to: target.path, item, style: 'skip' })
+				if (data.success !== 200)
+					throw new Error(data.message)
+			} catch (error) {
+				this.$buefy.toast.open({ message: escape(error.response?.data?.message || error.message), type: 'is-danger' })
+			} finally {
+				this.isMovingFiles = false
+				this.reload()
+			}
+		},
+
 		/**
 		 * @description: Paste Files
 		 * @return {*}
@@ -899,6 +972,10 @@ export default {
 
 			// Drag Over
 			this.uploaderInstance.on('dragover', (event) => {
+				if (!event.dataTransfer.types.includes('Files')) {
+					event.dataTransfer.dropEffect = 'none'
+					return
+				}
 				this.isDragIn = true
 				this.openUploadList = false
 				if (this.timeout !== null) {
@@ -1352,5 +1429,11 @@ export default {
 		border-radius: 0;
 		overflow: hidden;
 	}
+}
+
+:deep(.file-move-target) {
+	outline: 2px solid var(--bulma-link, #3285ff);
+	outline-offset: -2px;
+	border-radius: 4px;
 }
 </style>

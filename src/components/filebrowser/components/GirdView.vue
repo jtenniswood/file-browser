@@ -21,10 +21,15 @@
 						<div :data-rel="index" class="file-card-item" @mousedown.stop="">
 							<div class="node-card-container">
 								<div :class="{ active: item.isSelected }" class="outer-wrapper">
-									<div :class="{ isCutting: getCardState(item) }"
-										class="node-card is-unselectable"
+									<div :class="{ 'isCutting': getCardState(item), 'file-move-target': filePanel?.moveTarget === item.path }"
+										:draggable="filePanel?.canDragFile(item)" class="node-card is-unselectable"
 										@click.stop="onCardClick($event, item, index)"
-										@contextmenu.prevent="openContextMenu($event, item)">
+										@contextmenu.prevent="openContextMenu($event, item)"
+										@dragend="filePanel?.clearFileDrag()"
+										@dragleave="filePanel?.leaveMoveTarget($event, item.path)"
+										@dragover="filePanel?.showMoveTarget($event, item)"
+										@dragstart="filePanel?.startFileDrag($event, item)"
+										@drop="filePanel?.dropFiles($event, item)">
 										<div class="cover">
 											<icon-container :item="item"></icon-container>
 										</div>
