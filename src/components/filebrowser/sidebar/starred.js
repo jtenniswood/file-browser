@@ -23,6 +23,8 @@ const materialFolderIcons = {
 	games: 'gamepad-variant-outline',
 	music: 'music',
 	projects: 'briefcase-outline',
+	sports: 'soccer',
+	television: 'television-classic',
 }
 
 export function pinnedFolderIcon(icon) {
