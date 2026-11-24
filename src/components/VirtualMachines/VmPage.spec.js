@@ -91,7 +91,7 @@ describe('creating a virtual machine', () => {
 
 		expect(vmApi.create).toHaveBeenCalledTimes(1)
 		expect(vmApi.list).toHaveBeenCalledTimes(2)
-		expect(isOpen('.vm-create')).toBe(false)
+		await vi.waitFor(() => expect(isOpen('.vm-create')).toBe(false))
 		const toast = document.querySelector('.toast')
 		expect(toast.querySelector('img')).toBeNull()
 		expect(toast.textContent).toContain(`${HOSTILE} was created but could not be started: cannot start ${HOSTILE}`)
@@ -516,7 +516,7 @@ describe('cutting a virtual machine off', () => {
 		page = null
 	})
 
-	const dialog = () => document.querySelector('.dialog')
+	const dialog = () => [...document.querySelectorAll('.dialog')].find(element => element.closest('.modal')?.style.display !== 'none') ?? null
 	const button = (text, root = document) => [...root.querySelectorAll('button, .dropdown-item')].find(b => b.textContent.trim() === text)
 	const forceOff = () => button('Force off', document.querySelector('.power-bar')).click()
 	const settle = () => flushPromises()
@@ -534,7 +534,7 @@ describe('cutting a virtual machine off', () => {
 		button('Cancel', dialog()).click()
 		await settle()
 		expect(vmApi.action).not.toHaveBeenCalled()
-		expect(isOpen('.dialog')).toBe(false)
+		await vi.waitFor(() => expect(isOpen('.dialog')).toBe(false))
 	})
 
 	it('switches the VM off once Force off is confirmed', async () => {
@@ -597,7 +597,7 @@ describe('cutting a virtual machine off', () => {
 			button('Force off', dialog()).click()
 			await settle()
 			expect(vmApi.action).not.toHaveBeenCalled()
-			expect(isOpen('.dialog')).toBe(false)
+			await vi.waitFor(() => expect(isOpen('.dialog')).toBe(false))
 			expect(toasts()).toHaveLength(0)
 		})
 
@@ -610,7 +610,7 @@ describe('cutting a virtual machine off', () => {
 			button('Force reset', dialog()).click()
 			await settle()
 			expect(vmApi.action).not.toHaveBeenCalled()
-			expect(isOpen('.dialog')).toBe(false)
+			await vi.waitFor(() => expect(isOpen('.dialog')).toBe(false))
 		})
 
 		// Force off can pull the plug on a VM that is shutting down; a reset cannot
@@ -623,6 +623,7 @@ describe('cutting a virtual machine off', () => {
 			button('Force reset', dialog()).click()
 			await settle()
 			expect(vmApi.action).not.toHaveBeenCalled()
+			await vi.waitFor(() => expect(isOpen('.dialog')).toBe(false))
 
 			forceOff()
 			await settle()
@@ -652,7 +653,7 @@ describe('cutting a virtual machine off', () => {
 			page.fire('vm:state-changed', { 'vm:id': 'vm-1', 'vm:event': 'undefined' })
 			await settle()
 			expect(states()).toEqual([])
-			expect(isOpen('.dialog')).toBe(false)
+			await vi.waitFor(() => expect(isOpen('.dialog')).toBe(false))
 			expect(vmApi.action).not.toHaveBeenCalled()
 		})
 
@@ -665,7 +666,7 @@ describe('cutting a virtual machine off', () => {
 			page.socket.receive('connect')
 			await settle()
 			expect(states()).toEqual([])
-			expect(isOpen('.dialog')).toBe(false)
+			await vi.waitFor(() => expect(isOpen('.dialog')).toBe(false))
 		})
 
 		// the dialog fades for a moment after it closes, and its button still works

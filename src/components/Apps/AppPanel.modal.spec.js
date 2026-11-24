@@ -73,8 +73,8 @@ describe('escape on the panel inside its real modal', () => {
 		await openPanel()
 		await press()
 
-		expect(dialogShown()).toBe(false)
-		expect(shown()).toBe(false)
+		await vi.waitFor(() => expect(dialogShown()).toBe(false))
+		await vi.waitFor(() => expect(shown()).toBe(false))
 	})
 
 	it('asks first with a draft open: the question survives the key that raised it, the next Escape closes only the question, Discard closes the panel', async () => {
@@ -87,7 +87,7 @@ describe('escape on the panel inside its real modal', () => {
 
 		await press()
 		await flushPromises()
-		expect(dialogShown()).toBe(false)
+		await vi.waitFor(() => expect(dialogShown()).toBe(false))
 		expect(panelRef.editorState.isDirty).toBe(true)
 		expect(document.querySelector('.modal-card')).not.toBeNull()
 
@@ -95,6 +95,6 @@ describe('escape on the panel inside its real modal', () => {
 		expect(dialogShown()).toBe(true)
 		document.querySelector('.dialog .button.is-primary, .dialog footer button:last-child').click()
 		await flushPromises()
-		expect(shown()).toBe(false)
+		await vi.waitFor(() => expect(shown()).toBe(false))
 	})
 })
