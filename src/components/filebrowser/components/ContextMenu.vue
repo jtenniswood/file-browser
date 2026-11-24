@@ -58,9 +58,6 @@
 					<b-dropdown-item key="file-context1" aria-role="menuitem" @click="download">
 						{{ $t('Download') }}
 					</b-dropdown-item>
-					<b-dropdown-item v-if="showSingleEdit" key="file-context2" aria-role="menuitem" @click="copyPath">
-						{{ $t('Copy Path') }}
-					</b-dropdown-item>
 					<b-dropdown-item v-if="showSingleEdit && (!isSidebarMount || isStarred)" key="file-context-star"
 						aria-role="menuitem" @click="toggleStar">
 						{{ isStarred ? $t('Unpin') : $t('Add to Pinned') }}

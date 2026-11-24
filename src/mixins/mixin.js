@@ -2,7 +2,6 @@ import qs from 'qs'
 import has from 'lodash/has'
 import escape from 'lodash/escape'
 import union from 'lodash/union'
-import copy from 'clipboard-copy'
 import { renderSize } from './file_utils'
 import { automaticFolderIcon } from '@/components/filebrowser/automaticFolderIcon'
 import { customFolderIcon } from '@/components/filebrowser/folderIcons'
@@ -207,15 +206,6 @@ export const mixin = {
 			return apiUrl + qs.stringify(parameters)
 		},
 
-		// Copy Path
-		copyPath() {
-			this.$refs.dropDown.toggle()
-			copy(this.item.path)
-			this.$buefy.toast.open({
-				message: this.$t('Copied to clipboard'),
-				type: 'is-success',
-			})
-		},
 		/**
 		 * @description: Open Context Menu
 		 * @param {Object,Object} event item
