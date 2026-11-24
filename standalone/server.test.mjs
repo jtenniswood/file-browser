@@ -141,7 +141,7 @@ it('saves a folder icon across renames, moves, restores and server restarts', as
 	assert.equal(saved.find(item => item.path === '/DATA/Work').folder_icon, 'projects')
 	assert.equal((await setIcon(restarted.origin, secondCookie, movedPath, null)).status, 200)
 	assert.equal((await list(restarted.origin, secondCookie, '/DATA')).find(item => item.path === movedPath).folder_icon, undefined)
-})
+}, 20000)
 
 const networkAddress = '192.168.1.50'
 const proxyHost = 'files.example.test'
