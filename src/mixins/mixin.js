@@ -91,7 +91,7 @@ export const mixin = {
 			const isDir = (has(item, 'is_dir') || has(item, 'isFolder')) ? item.is_dir : false
 			let icon = 'unknown'
 			if (isDir) {
-				icon = 'folder-' + automaticFolderIcon(item)
+				icon = `folder-${automaticFolderIcon(item)}`
 			} else {
 				const ext = this.getFileExt(item)
 				Object.keys(typeMap).forEach((_type) => {
