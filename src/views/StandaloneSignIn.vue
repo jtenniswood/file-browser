@@ -4,17 +4,11 @@
 			<template v-if="needsSetup">
 				<p class="has-text-weight-semibold mb-2">Files</p>
 				<h1 class="title is-4 mb-3">{{ title }}</h1>
-				<p class="mb-5">This account can manage users and access the Files folder.</p>
 			</template>
 			<form @submit.prevent="submit">
 				<div v-show="!requiresCode" class="field">
-					<label class="label" for="files-user">Username</label>
-					<input id="files-user" ref="usernameField" v-model="username" class="input" autocomplete="username"
-						autocapitalize="none" :disabled="requiresCode" maxlength="40" required>
-				</div>
-				<div v-show="!requiresCode" class="field">
 					<label class="label" for="files-password">Password</label>
-					<input id="files-password" v-model="password" class="input" type="password" :disabled="requiresCode"
+					<input id="files-password" ref="passwordField" v-model="password" class="input" type="password" :disabled="requiresCode"
 						:autocomplete="needsSetup ? 'new-password' : 'current-password'" :minlength="needsSetup ? 12 : undefined" required>
 					<p v-if="needsSetup" class="help">Use at least 12 characters.</p>
 				</div>
@@ -33,7 +27,7 @@
 				</div>
 				<p v-if="error" class="help is-danger mt-3" role="alert">{{ error }}</p>
 				<button class="button is-primary is-fullwidth mt-5" :class="{ 'is-loading': busy }" :disabled="busy" type="submit">
-					{{ needsSetup ? 'Create administrator' : 'Sign in' }}
+					{{ needsSetup ? 'Set password' : 'Sign in' }}
 				</button>
 				<button v-if="requiresCode" class="button is-ghost is-fullwidth mt-2" :disabled="busy" type="button" @click="resetCode">
 					Back to sign in
@@ -49,7 +43,6 @@ import { filesAccountRequest } from '@/service/filesAccounts'
 
 const props = defineProps({ needsSetup: Boolean, setupCodeRequired: Boolean })
 const emit = defineEmits(['complete', 'refresh'])
-const username = ref('')
 const password = ref('')
 const confirmation = ref('')
 const setupCode = ref('')
@@ -57,22 +50,22 @@ const code = ref('')
 const requiresCode = ref(false)
 const error = ref('')
 const busy = ref(false)
-const usernameField = ref(null)
+const passwordField = ref(null)
 const factorField = ref(null)
 const title = computed(() => {
 	if (props.needsSetup)
-		return 'Set up your administrator account'
+		return 'Set up Files'
 	return requiresCode.value ? 'Verify your sign-in' : 'Sign in'
 })
 
-onMounted(() => usernameField.value?.focus())
+onMounted(() => passwordField.value?.focus())
 
 function resetCode() {
 	requiresCode.value = false
 	password.value = ''
 	code.value = ''
 	error.value = ''
-	nextTick(() => usernameField.value?.focus())
+	nextTick(() => passwordField.value?.focus())
 }
 
 async function submit() {
@@ -87,7 +80,7 @@ async function submit() {
 	try {
 		const result = await filesAccountRequest(props.needsSetup ? 'setup' : 'login', {
 			method: 'POST',
-			body: { username: username.value.trim(), password: password.value, code: code.value.trim(), setupCode: setupCode.value.trim() },
+			body: { password: password.value, code: code.value.trim(), setupCode: setupCode.value.trim() },
 		})
 		if (result.requiresCode) {
 			requiresCode.value = true

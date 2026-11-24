@@ -260,7 +260,7 @@ export async function createFilesServer({
 				const secure = publicUrl && request.headers.host?.toLowerCase() === publicUrl.host
 				return json(response, 200, await accounts.handle(route, body, request, response, secure))
 			}
-			if (/^\/v\d+\//.test(pathname) && !accounts.user(request))
+			if (/^\/v\d+\//.test(pathname) && !accounts.signedIn(request))
 				throw new RequestError(401, 'Sign in to Files.')
 
 			const path = searchParams.get('path')

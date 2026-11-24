@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { createHmac } from 'node:crypto'
+import { createHmac, scryptSync } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -11,7 +11,7 @@ import { createFilesServer } from './server.mjs'
 import { mountedPaths } from './storage.mjs'
 import { acceptedStep } from './totp.mjs'
 
-const account = { username: 'admin', password: 'initial test passphrase' }
+const account = { password: 'initial test passphrase' }
 const cookieOf = response => response.headers.get('set-cookie')?.split(';')[0]
 
 async function apiRequest(origin, route, { method = 'GET', body, cookie, headers } = {}) {
@@ -293,7 +293,7 @@ it('matches the RFC 6238 SHA-1 example and refuses to reuse an accepted step', (
 	assert.equal(acceptedStep(secret, '287082', 1, 59_000), null)
 })
 
-it('sets up a single administrator, protects files and manages members and their two-factor sessions', { timeout: 20_000 }, async (t) => {
+it('protects the default account and preserves the original administrator on upgrade', { timeout: 20_000 }, async (t) => {
 	const now = Date.now()
 	const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
 	t.onTestFinished(() => clock.mockRestore())
@@ -305,14 +305,13 @@ it('sets up a single administrator, protects files and manages members and their
 	const options = { assetsDirectory, directory: join(directory, 'data'), setupCode: 'first-run-test-code' }
 	const { origin, server } = await startServer(options, t)
 	const status = target => apiRequest(target, '/v1/auth/session').then(response => response.json())
-	const login = (user, code) => submit(origin, '/v1/auth/login', { ...user, code })
+	const login = (target, code) => submit(target, '/v1/auth/login', { ...account, code })
 	const manageUsers = '/v1/auth/users'
 	const listFiles = '/v1/folder?path=/DATA'
 	const secondFactor = '/v1/users/2fa/'
 	const setup = '/v1/auth/setup'
 	const accountsPath = join(options.directory, '.files-state', 'accounts.json')
 	const member = { username: 'Member', password: 'member test passphrase' }
-	const makeMember = { ...member, role: 'member' }
 	assert.deepEqual((await status(origin)).data, { needsSetup: true, setupCodeRequired: true, user: null })
 	for (const path of [listFiles, '/v3/file?path=/DATA/a.txt', '/v1/batch?path=/DATA/a.txt', manageUsers])
 		assert.equal((await apiRequest(origin, path)).status, 401)
@@ -320,73 +319,82 @@ it('sets up a single administrator, protects files and manages members and their
 	assert.equal((await submit(origin, setup, account)).status, 403)
 	const setupBody = { ...account, setupCode: options.setupCode }
 	const both = await Promise.all([submit(origin, setup, setupBody), submit(origin, setup, setupBody)])
-	const administrator = both.find(response => response.status === 200)
-	assert.equal(both.find(response => response !== administrator).status, 409)
-	const adminCookie = cookieOf(administrator)
-	assert.match(administrator.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/)
-	assert.equal((await apiRequest(origin, manageUsers, { method: 'POST', body: makeMember, cookie: adminCookie, headers: { origin: 'https://other.test' } })).status, 403)
-	assert.equal((await submit(origin, manageUsers, makeMember, adminCookie)).status, 200)
-	assert.equal((await submit(origin, manageUsers, { ...makeMember, username: 'MEMBER' }, adminCookie)).status, 409)
-	assert.equal((await submit(origin, manageUsers, { username: 'admin' }, adminCookie, 'DELETE')).status, 400)
-	assert.equal((await login({ ...member, password: 'wrong' })).status, 401)
-	let memberCookie = cookieOf(await login({ ...member, username: 'MEMBER' }))
-	assert.ok(memberCookie)
-	assert.equal((await apiRequest(origin, listFiles, { cookie: memberCookie })).status, 200)
-	assert.equal((await apiRequest(origin, manageUsers, { cookie: memberCookie })).status, 403)
-	assert.equal((await submit(origin, manageUsers, { ...makeMember, username: 'other' }, memberCookie)).status, 403)
-	assert.equal((await submit(origin, `${secondFactor}enable`, { code: '000000' }, memberCookie)).status, 410)
-	const { data: enrollment } = await (await submit(origin, `${secondFactor}setup`, { password: member.password }, memberCookie)).json()
+	const setupResponse = both.find(response => response.status === 200)
+	assert.equal(both.find(response => response !== setupResponse).status, 409)
+	let ownerCookie = cookieOf(setupResponse)
+	assert.match(setupResponse.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/)
+	assert.deepEqual((await setupResponse.json()).data.user, { username: 'admin', totp_enabled: false })
+	assert.equal((await apiRequest(origin, listFiles, { cookie: ownerCookie })).status, 200)
+	assert.equal((await apiRequest(origin, manageUsers, { method: 'POST', body: member, cookie: ownerCookie, headers: { origin: 'https://other.test' } })).status, 403)
+	assert.equal((await apiRequest(origin, manageUsers, { cookie: ownerCookie })).status, 404)
+	assert.equal((await submit(origin, manageUsers, member, ownerCookie)).status, 404)
+	assert.equal((await submit(origin, manageUsers, member, ownerCookie, 'DELETE')).status, 404)
+	assert.equal((await submit(origin, manageUsers + '/password', member, ownerCookie, 'PUT')).status, 404)
+	assert.equal((await submit(origin, manageUsers + '/2fa', member, ownerCookie, 'DELETE')).status, 404)
+	assert.equal((await submit(origin, secondFactor + 'enable', { code: '000000' }, ownerCookie)).status, 410)
+	const { data: enrollment } = await (await submit(origin, secondFactor + 'setup', account, ownerCookie)).json()
 	const authenticatorUrl = new URL(enrollment.otpauth_url)
 	assert.equal(authenticatorUrl.protocol, 'otpauth:')
 	assert.equal(authenticatorUrl.hostname, 'totp')
-	assert.equal(decodeURIComponent(authenticatorUrl.pathname), `/Files:${member.username}`)
+	assert.equal(decodeURIComponent(authenticatorUrl.pathname), '/Files:admin')
 	assert.equal(authenticatorUrl.searchParams.get('issuer'), 'Files')
-	const enabled = await submit(origin, `${secondFactor}enable`, { code: totpCode(enrollment.secret, Date.now() - 30_000) }, memberCookie)
+	const enabled = await submit(origin, `${secondFactor}enable`, { code: totpCode(enrollment.secret, Date.now() - 30_000) }, ownerCookie)
 	assert.equal(enabled.status, 200)
-	const previousCookie = memberCookie
-	memberCookie = cookieOf(enabled)
+	const previousCookie = ownerCookie
+	ownerCookie = cookieOf(enabled)
 	const { data: { recovery_codes: recoveryCodes } } = await enabled.json()
 	assert.equal(recoveryCodes.length, 8)
 	assert.equal((await apiRequest(origin, listFiles, { cookie: previousCookie })).status, 401)
-	assert.equal((await apiRequest(origin, listFiles, { cookie: memberCookie })).status, 200)
-	const challenge = await login(member)
+	assert.equal((await apiRequest(origin, listFiles, { cookie: ownerCookie })).status, 200)
+	const challenge = await login(origin)
 	assert.equal(cookieOf(challenge), undefined)
 	assert.deepEqual((await challenge.json()).data, { requiresCode: true })
 	const code = totpCode(enrollment.secret, Date.now())
-	assert.equal((await login(member, code)).status, 200)
-	assert.equal((await login(member, code)).status, 401)
-	const usedRecovery = await login(member, recoveryCodes[0])
+	assert.equal((await login(origin, code)).status, 200)
+	assert.equal((await login(origin, code)).status, 401)
+	const usedRecovery = await login(origin, recoveryCodes[0])
 	const recoveryCookie = cookieOf(usedRecovery)
 	assert.ok(recoveryCookie)
-	assert.equal((await login(member, recoveryCodes[0])).status, 401)
+	assert.equal((await login(origin, recoveryCodes[0])).status, 401)
 	assert.equal((await submit(origin, '/v1/auth/logout', undefined, recoveryCookie)).status, 200)
 	assert.equal((await apiRequest(origin, listFiles, { cookie: recoveryCookie })).status, 401)
-	const newPassword = 'another member passphrase'
-	assert.equal((await submit(origin, `${manageUsers}/password`, { username: member.username, password: newPassword }, adminCookie, 'PUT')).status, 200)
-	assert.equal((await apiRequest(origin, listFiles, { cookie: memberCookie })).status, 401)
-	assert.equal((await login(member, recoveryCodes[1])).status, 401)
-	const serialized = await readFile(accountsPath, 'utf8')
-	for (const secret of [account.password, member.password, newPassword, recoveryCodes[1]])
-		assert.ok(!serialized.includes(secret))
+	// Simulate a pre-upgrade account file with a custom owner name and both legacy roles.
 	await new Promise(resolve => server.close(resolve))
+	const records = JSON.parse(await readFile(accountsPath, 'utf8'))
+	assert.equal(records.users.length, 1)
+	records.users[0].username = 'OriginalOwner'
+	const salt = '1'.repeat(32)
+	const hash = scryptSync(member.password, Buffer.from(salt, 'hex'), 64, { N: 2 ** 15, r: 8, p: 3, maxmem: 64 * 1024 ** 2 }).toString('hex')
+	records.users.push(
+		{ username: member.username, password: { salt, hash }, role: 'member', totp: null },
+		{ username: 'OtherAdmin', password: { salt, hash }, role: 'admin', totp: null },
+	)
+	await writeFile(accountsPath, JSON.stringify(records))
+
 	const { origin: restarted } = await startServer(options, t)
 	assert.equal((await status(restarted)).data.needsSetup, false)
-	assert.equal((await apiRequest(restarted, listFiles, { cookie: adminCookie })).status, 401)
-	assert.equal((await submit(restarted, '/v1/auth/login', { username: member.username, password: newPassword, code: recoveryCodes[0] })).status, 401)
-	const signedInAgain = await submit(restarted, '/v1/auth/login', { username: member.username, password: newPassword, code: recoveryCodes[1] })
+	assert.equal((await apiRequest(restarted, listFiles, { cookie: ownerCookie })).status, 401)
+	assert.equal((await submit(restarted, '/v1/auth/login', { password: member.password })).status, 401)
+	assert.equal((await submit(restarted, '/v1/auth/login', { username: 'OtherAdmin', password: member.password })).status, 401)
+	assert.equal((await login(restarted, recoveryCodes[0])).status, 401)
+	const signedInAgain = await login(restarted, recoveryCodes[1])
 	assert.equal(signedInAgain.status, 200)
-	const signedInAdmin = cookieOf(await submit(restarted, '/v1/auth/login', account))
-	const rotated = await submit(restarted, '/v1/auth/password', { currentPassword: account.password, password: 'rotated admin passphrase' }, signedInAdmin, 'PUT')
+	assert.deepEqual((await signedInAgain.json()).data.user, { username: 'OriginalOwner', totp_enabled: true })
+	const currentCookie = cookieOf(signedInAgain)
+	const newPassword = 'rotated owner passphrase'
+	const rotated = await submit(restarted, '/v1/auth/password', { currentPassword: account.password, password: newPassword }, currentCookie, 'PUT')
 	assert.equal(rotated.status, 200)
-	assert.equal((await apiRequest(restarted, listFiles, { cookie: signedInAdmin })).status, 401)
-	const rotatedAdmin = cookieOf(rotated)
-	assert.equal((await submit(restarted, `${manageUsers}/2fa`, { username: member.username }, rotatedAdmin, 'DELETE')).status, 200)
-	assert.equal((await apiRequest(restarted, listFiles, { cookie: cookieOf(signedInAgain) })).status, 401)
-	const afterFactorReset = cookieOf(await submit(restarted, '/v1/auth/login', { username: member.username, password: newPassword }))
-	assert.ok(afterFactorReset)
-	assert.equal((await submit(restarted, manageUsers, { username: member.username }, rotatedAdmin, 'DELETE')).status, 200)
-	assert.equal((await apiRequest(restarted, listFiles, { cookie: afterFactorReset })).status, 401)
-	const incorrectLogin = () => submit(restarted, '/v1/auth/login', { username: 'nonexistent-account' })
+	assert.equal((await apiRequest(restarted, listFiles, { cookie: currentCookie })).status, 401)
+	assert.equal((await submit(restarted, secondFactor + 'disable', { password: newPassword }, cookieOf(rotated))).status, 200)
+	assert.equal((await submit(restarted, '/v1/auth/login', { password: newPassword })).status, 200)
+
+	const serialized = await readFile(accountsPath, 'utf8')
+	assert.deepEqual(JSON.parse(serialized).users.map(user => user.username), ['OriginalOwner'])
+	for (const secret of [account.password, member.password, newPassword, recoveryCodes[1]])
+		assert.ok(!serialized.includes(secret))
+
+	clock.mockReturnValue(now + 10 * 60 * 1000)
+	const incorrectLogin = () => submit(restarted, '/v1/auth/login', { password: 'wrong password' })
 	for (let attempt = 0; attempt < 12; attempt++)
 		assert.equal((await incorrectLogin()).status, 401)
 	assert.equal((await incorrectLogin()).status, 429)

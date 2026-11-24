@@ -38,12 +38,12 @@ jobs:
           setup_code=$(docker compose logs --no-color files | sed -n 's/.*Files setup code: \([0-9a-f]*\)$/\1/p' | tail -1)
           test -n "$setup_code"
           password=$(openssl rand -hex 24)
-          jq -n --arg password "$password" --arg setupCode "$setup_code" '{username:"owner", $password, $setupCode}' \
+          jq -n --arg password "$password" --arg setupCode "$setup_code" '{$password, $setupCode}' \
             | curl -fsS --header "Origin: $url" --header 'Content-Type: application/json' --data @- "$url/v1/auth/setup" \
-            | jq -e '.data.user.role == "admin"'
-          jq -n --arg password "$password" '{username:"owner", $password}' \
+            | jq -e '.data.user.username == "admin"'
+          jq -n --arg password "$password" '{$password}' \
             | curl -fsS --header "Origin: $url" --header 'Content-Type: application/json' --data @- --cookie-jar "$work/cookies" "$url/v1/auth/login" \
-            | jq -e '.data.user.username == "owner"'
+            | jq -e '.data.user.username == "admin"'
           curl -fsS --cookie "$work/cookies" --header "Origin: $url" --header 'Content-Type: application/json' \
             --data '{"path":"/DATA/smoke"}' "$url/v1/folder"
           curl -fsS --cookie "$work/cookies" "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
