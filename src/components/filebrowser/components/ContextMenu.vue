@@ -61,7 +61,8 @@
 					<b-dropdown-item v-if="showSingleEdit" key="file-context2" aria-role="menuitem" @click="copyPath">
 						{{ $t('Copy Path') }}
 					</b-dropdown-item>
-					<b-dropdown-item v-if="showSingleEdit" key="file-context-star" aria-role="menuitem" @click="toggleStar">
+					<b-dropdown-item v-if="showSingleEdit && (!isSidebarMount || isStarred)" key="file-context-star"
+						aria-role="menuitem" @click="toggleStar">
 						{{ isStarred ? $t('Remove from Starred') : $t('Add to Starred') }}
 					</b-dropdown-item>
 					<b-dropdown-item v-if="$standaloneFiles && showSingleEdit && item.is_dir && filePanel.canChangeHere"
@@ -154,6 +155,9 @@ export default {
 		},
 		isMounted() {
 			return this.item.extensions ? this.item.extensions.mounted : false
+		},
+		isSidebarMount() {
+			return this.$standaloneFiles && this.filePanel.mountPoints.includes(this.item.path)
 		},
 		isStarred() {
 			return (this.$store.state.shortcutData || []).some(s => s.path === this.item.path)

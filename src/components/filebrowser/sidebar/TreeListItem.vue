@@ -1,8 +1,8 @@
 <template>
-	<div class="li">
+	<div class="li" @keydown.enter.self.prevent="open">
 		<div v-if="item.visible" :class="{ 'active': isActived, 'is-unavailable': item.unavailable }"
 			:title="item.unavailable ? $t('Not available: it may have been moved or deleted') : null"
-			class="is-flex list-item new-list-item" @click="open(item.path)">
+			class="is-flex list-item new-list-item" @click="open">
 			<div class="cover mr-2 is-flex-shrink-0 is-relative is-flex is-align-items-center">
 				<template v-if="item.icon !== 'danger'">
 					<img v-if="folderIcon" :src="folderIcon" width="24" height="24" alt="">
@@ -19,10 +19,7 @@
 				</div>
 			</div>
 			<div class=" is-flex-grow-1 one-line">{{ item.name }}</div>
-			<div v-if="iconName !== ''" :aria-label="iconLabel || null" :class="{ 'sidebar-remove': hideIconUntilHover }"
-				:role="iconLabel ? 'button' : null" :tabindex="iconLabel ? 0 : null" :title="iconLabel || null"
-				class="is-flex-shrink-0 is-flex" @click.stop="rightIconClick"
-				@keydown.enter.prevent.stop="rightIconClick" @keydown.space.prevent.stop="rightIconClick">
+			<div v-if="iconName !== ''" class="is-flex-shrink-0 is-flex" @click.stop="rightIconClick">
 				<b-icon :icon="iconName" :pack="item.pack" class="casa-color-gray" custom-size="casa-16px"></b-icon>
 			</div>
 		</div>
@@ -50,12 +47,6 @@ export default {
 			default: 'font',
 		},
 		iconName: {
-			type: String,
-			default: '',
-		},
-		hideIconUntilHover: Boolean,
-		// names the right icon for screen readers and makes it a keyboard button
-		iconLabel: {
 			type: String,
 			default: '',
 		},
@@ -122,15 +113,10 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.sidebar-remove {
-	opacity: 0;
-	pointer-events: none;
-}
-
-.list-item:hover .sidebar-remove,
-.list-item:focus-within .sidebar-remove {
-	opacity: 1;
-	pointer-events: auto;
+.li[tabindex]:focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: -2px;
+	border-radius: 4px;
 }
 
 .is-unavailable {

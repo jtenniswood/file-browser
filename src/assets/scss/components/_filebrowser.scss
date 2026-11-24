@@ -121,6 +121,12 @@
                     overflow-y: auto;
                     overflow-x: hidden;
 
+                    .sidebar-group-title {
+                        padding: 0.25rem 0.75rem;
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                    }
+
                     .ul {
                         overflow: hidden;
                         transition: height 0.5s cubic-bezier(0.66, 0, 0.01, 1);

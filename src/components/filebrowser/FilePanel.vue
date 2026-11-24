@@ -32,6 +32,8 @@
 								<div class="list-container scrollbars-light pt-0 is-flex-grow-1">
 									<tree-list :auto-load="true" :is-active="pageType == `file`"
 										:path="rootPath"></tree-list>
+									<standalone-mount-list v-if="$standaloneFiles" :is-active="pageType === 'file'"
+										:paths="mountPoints" />
 								</div>
 							</div>
 							<!-- Files End -->
@@ -147,7 +149,7 @@
 											<span aria-hidden="true" class="file-view-icon">{{ hiddenFilesIcon }}</span>
 										</p>
 									</b-tooltip>
-									<b-dropdown position="is-bottom-left" aria-role="menu" class="mr-3" @update:model-value="pickSort">
+									<b-dropdown position="is-bottom-left" aria-role="menu" class="file-dropdown mr-3">
 										<template #trigger>
 											<b-tooltip :label="$t('Sort by')" position="is-left" type="is-dark">
 												<p :aria-label="$t('Sort by')" class="is-clickable none-line-height" role="button" tabindex="0">
@@ -155,8 +157,9 @@
 												</p>
 											</b-tooltip>
 										</template>
-										<b-dropdown-item v-for="option in sortOptions" :key="option.sort" :value="option.sort"
-											:class="{ 'is-active': $store.state.sort === option.sort }" aria-role="menuitem">
+											<b-dropdown-item v-for="option in sortOptions" :key="option.sort"
+												:aria-current="$store.state.sort === option.sort ? 'true' : null" aria-role="menuitem"
+												@click="pickSort(option.sort)">
 											{{ $t(option.text) }}
 											<span v-if="$store.state.sort === option.sort" class="ml-1">{{ $store.state.order === 'asc' ? '↑' : '↓' }}</span>
 										</b-dropdown-item>
@@ -260,6 +263,7 @@ import escape from 'lodash/escape'
 
 import TreeList from './sidebar/TreeList.vue'
 import MountList from './sidebar/MountList.vue'
+import StandaloneMountList from './sidebar/StandaloneMountList.vue'
 import ShareEntryButton from './shared/ShareEntryButton.vue'
 import ShareListPage from './shared/ShareListPage.vue'
 
@@ -331,6 +335,7 @@ export default {
 		ShareEntryButton,
 		ShareListPage,
 		MountList,
+		StandaloneMountList,
 		MountActionButton,
 		// Drop
 		DropPage: defineAsyncComponent(() => import('./drop/DropPage.vue')),
@@ -352,6 +357,7 @@ export default {
 			currentItem: null,
 			rootPath: '/DATA',
 			fileRootReady: false,
+			mountPoints: ['/DATA'],
 			// the folders given to an account and the ones it may write (CasaOS#168); null for the owner
 			accountFolders: null,
 			currentPath: '',
@@ -618,8 +624,12 @@ export default {
 		async resolveFileRoot() {
 			try {
 				const res = await withTimeout(this.$api.file.getRoots(), FILE_ROOTS_TIMEOUT_MS)
-				this.accountFolders = accountFoldersFrom(res?.data?.data)
-				this.rootPath = this.accountFolders ? (this.accountFolders.folders[0] || '/') : fileRootFrom(res?.data?.data?.roots)
+				const data = res?.data?.data
+				this.accountFolders = accountFoldersFrom(data)
+				this.rootPath = this.accountFolders ? (this.accountFolders.folders[0] || '/') : fileRootFrom(data?.roots)
+				if (this.$standaloneFiles) {
+					this.mountPoints = data?.mount_points ?? [this.rootPath]
+				}
 			} catch {
 				this.rootPath = '/DATA'
 			}

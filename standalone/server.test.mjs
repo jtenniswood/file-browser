@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { it, vi } from 'vitest'
 import { createFilesServer } from './server.mjs'
+import { mountedPaths } from './storage.mjs'
 import { acceptedStep } from './totp.mjs'
 
 const account = { username: 'admin', password: 'initial test passphrase' }
@@ -30,6 +31,18 @@ async function startServer(options, t) {
 	return { server, origin: `http://127.0.0.1:${server.address().port}` }
 }
 
+it('finds mount points inside the data directory and decodes their names', () => {
+	const mountInfo = [
+		'99 1 0:1 /host /data rw - ext4 /dev/root rw',
+		'100 99 0:1 /work /data/Work rw - ext4 /dev/root rw',
+		'101 99 0:2 / /data/Media\\040Drive rw - ext4 /dev/media rw',
+		'102 99 0:3 / /data/Work/Archive rw - ext4 /dev/archive rw',
+		'103 99 0:4 / /data/Work/Archive rw - tmpfs tmpfs rw',
+		'104 1 0:5 / /data-other/Outside rw - tmpfs tmpfs rw',
+	].join('\n')
+	assert.deepEqual(mountedPaths(mountInfo, '/data'), ['/DATA/Media Drive', '/DATA/Work', '/DATA/Work/Archive'])
+})
+
 it('standalone Files serves and updates only the configured data directory', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-'))
 	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
@@ -48,6 +61,7 @@ it('standalone Files serves and updates only the configured data directory', asy
 	const options = { assetsDirectory, directory: dataDirectory, maxUploadBytes: 64 }
 	const { origin } = await startServer(options, t)
 	assert.equal((await fetch(`${origin}/v1/folder?path=/DATA`)).status, 401)
+	assert.equal((await apiRequest(origin, '/v1/file/roots')).status, 401)
 	const cookie = cookieOf(await submit(origin, '/v1/auth/setup', account))
 	assert.ok(cookie)
 	const request = (path, method = 'GET', body, extra = {}) => fetch(origin + path, {
@@ -63,6 +77,11 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.equal(home.headers.get('www-authenticate'), null)
 	assert.equal(await home.text(), '<title>Files</title>')
 	assert.deepEqual(await list(), [])
+	assert.deepEqual((await (await request('/v1/file/roots')).json()).data, {
+		roots: ['/DATA'],
+		writable: ['/DATA'],
+		mount_points: ['/DATA'],
+	})
 	assert.equal((await request('/v1/folder?path=/DATA/outside')).status, 403)
 	assert.equal((await request('/v3/file?path=/DATA/%2e%2e/private.txt')).status, 400)
 	assert.equal((await request('/v1/folder?path=/DATA/.files-state')).status, 400)

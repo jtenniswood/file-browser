@@ -264,7 +264,7 @@ export async function createFilesServer({
 			let data = null
 			switch (route) {
 				case 'GET /v1/file/roots':
-					data = { roots: [rootPath], writable: [rootPath] }
+					data = { roots: [rootPath], writable: [rootPath], mount_points: await store.mounts() }
 					break
 				case 'GET /v1/folder':
 					data = await store.list(path)

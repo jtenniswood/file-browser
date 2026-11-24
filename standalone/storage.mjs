@@ -36,6 +36,17 @@ function isSupported(stat) {
 	return stat.isFile() || stat.isDirectory()
 }
 
+export function mountedPaths(mountInfo, root) {
+	const prefix = root + sep
+	const paths = new Set()
+	for (const line of mountInfo.split('\n')) {
+		const mountPoint = line.split(' ')[4]?.replace(/\\(040|011|012|134)/g, (_, octal) => String.fromCharCode(Number.parseInt(octal, 8)))
+		if (mountPoint?.startsWith(prefix))
+			paths.add(rootPath + mountPoint.slice(root.length))
+	}
+	return [...paths].sort()
+}
+
 async function optionalStat(path) {
 	try {
 		return await lstat(path)
@@ -149,6 +160,24 @@ export async function openStorage(directory) {
 			}
 		}
 		return { content }
+	}
+
+	async function mounts() {
+		// Linux mountinfo reports directory and bind mounts in this process's namespace.
+		const mountInfo = await readFile('/proc/self/mountinfo', 'utf8').catch(() => '')
+		const paths = [rootPath]
+		for (const path of mountedPaths(mountInfo, root)) {
+			try {
+				const { target, stat } = await locate(path)
+				if (stat.isDirectory()) {
+					await access(target, constants.R_OK | constants.X_OK)
+					paths.push(path)
+				}
+			} catch {
+				// A mount can disappear while the list is being read.
+			}
+		}
+		return paths
 	}
 
 	async function openFile(path) {
@@ -269,6 +298,7 @@ export async function openStorage(directory) {
 		root,
 		state,
 		list,
+		mounts,
 		openFile,
 		upload,
 		async archivePaths(paths) {
