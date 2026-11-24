@@ -105,6 +105,15 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.equal(await preview.text(), 'image bytes')
 	assert.match((await request('/v3/file?path=/DATA/Docs/photo.AVIF&download=1', 'HEAD')).headers.get('content-disposition'), /^attachment/)
 
+	const model = Buffer.alloc(134)
+	model.writeUInt32LE(1, 80)
+	await writeFile(join(dataDirectory, 'Docs/model.STL'), model)
+	const modelPreview = await request('/v3/file?path=/DATA/Docs/model.STL')
+	assert.equal(modelPreview.headers.get('content-type'), 'model/stl')
+	assert.equal(modelPreview.headers.get('content-disposition'), null)
+	assert.deepEqual(Buffer.from(await modelPreview.arrayBuffer()), model)
+	assert.match((await request('/v3/file?path=/DATA/Docs/model.STL&download=1', 'HEAD')).headers.get('content-disposition'), /^attachment/)
+
 	const upload = name => `/v2/casaos/file/upload?${new URLSearchParams({ path: '/DATA', relativePath: name, totalChunks: '1', chunkNumber: '1' })}`
 	assert.equal((await request(upload('Photos/hello, world.txt'), 'POST', 'uploaded')).status, 200)
 	assert.equal(await readFile(join(dataDirectory, 'Photos/hello, world.txt'), 'utf8'), 'uploaded')

@@ -16,6 +16,10 @@ describe('getPanelType', () => {
 		expect(panelOf(name)).not.toBe('code-editor')
 	})
 
+	it.each(['model.stl', 'model.STL'])('opens %s in the STL viewer', (name) => {
+		expect(panelOf(name)).toBe('stl-viewer')
+	})
+
 	it('offers no panel for a binary it does not know', () => {
 		expect(panelOf('firmware.bin')).toBeNull()
 	})

@@ -51,6 +51,7 @@ const previewTypes = {
 	'.ogg': 'audio/ogg',
 	'.opus': 'audio/ogg',
 	'.pdf': 'application/pdf',
+	'.stl': 'model/stl',
 	'.srt': 'text/plain',
 	'.ass': 'text/plain',
 	'.vtt': 'text/vtt',
