@@ -10,7 +10,6 @@
 </template>
 
 <script>
-import has from 'lodash/has'
 import draggable from 'vuedraggable'
 import { accountFolderItems, homeFolders } from '../fileRoot.js'
 import TreeListItem from './TreeListItem.vue'
@@ -145,15 +144,7 @@ export default {
 
 		checkSharevisibility(item) {
 			const extensions = item.extensions
-			if (extensions === null) {
-				return false
-			} else {
-				if (has(extensions, 'share')) {
-					return extensions.share.shared === 'true'
-				} else {
-					return false
-				}
-			}
+			return extensions?.samba_shared === true || extensions?.share?.shared === 'true'
 		},
 
 	},

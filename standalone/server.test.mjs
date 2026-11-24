@@ -267,3 +267,38 @@ it('sets up a single administrator, protects files and manages members and their
 		assert.equal((await incorrectLogin()).status, 401)
 	assert.equal((await incorrectLogin()).status, 429)
 })
+
+it('marks exact Samba share roots and refreshes them as host settings change', async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'files-samba-'))
+	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
+	const assetsDirectory = join(directory, 'assets')
+	const dataDirectory = join(directory, 'data')
+	await mkdir(assetsDirectory)
+	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
+	await mkdir(join(dataDirectory, 'Documents', 'Nested'), { recursive: true })
+	await mkdir(join(dataDirectory, 'Documents backup'))
+	await writeFile(join(dataDirectory, 'report.txt'), 'report')
+
+	let paths = ['Documents', 'report.txt']
+	const readSambaShares = vi.fn(async () => paths)
+	const { origin } = await startServer({ assetsDirectory, directory: dataDirectory, readSambaShares }, t)
+	const route = '/v1/folder?path=/DATA'
+	assert.equal((await apiRequest(origin, route)).status, 401)
+	assert.equal(readSambaShares.mock.calls.length, 0)
+	const cookie = cookieOf(await submit(origin, '/v1/auth/setup', account))
+	const badges = async (path = '') => {
+		const response = await apiRequest(origin, route + path, { cookie })
+		assert.equal(response.status, 200)
+		const { data } = await response.json()
+		return data.content.filter(item => item.extensions?.samba_shared).map(item => item.name)
+	}
+
+	assert.deepEqual(await badges(), ['Documents'])
+	assert.deepEqual(await badges('/Documents'), [])
+	paths = ['Documents/Nested']
+	assert.deepEqual(await badges(), [])
+	assert.deepEqual(await badges('/Documents'), ['Nested'])
+	readSambaShares.mockRejectedValueOnce(new Error('Samba unavailable'))
+	assert.deepEqual(await badges('/Documents'), [])
+	assert.deepEqual(await badges('/Documents'), ['Nested'])
+})

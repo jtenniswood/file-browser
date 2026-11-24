@@ -17,7 +17,7 @@
 		</transition>
 		<div class="overlay-layer">
 			<b-icon v-if="isShared" class="share-icon casa-color-green casa-shape-rounded casa-shape-16px" custom-size="casa-12px"
-				icon="share" pack="casa"></b-icon>
+				icon="share" pack="casa" role="img" :aria-label="$t('Shared')" :title="$t('Shared')"></b-icon>
 		</div>
 	</div>
 </template>
