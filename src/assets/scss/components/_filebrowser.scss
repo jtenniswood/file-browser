@@ -53,6 +53,7 @@
         .modal-card-head {
             padding: 1.25rem 1.25rem 0.5rem 1.5rem;
             border-bottom: 1px solid var(--casa-divider-soft);
+            box-shadow: none;
 
             .input.is-rounded {
                 border-radius: 9999px !important;
