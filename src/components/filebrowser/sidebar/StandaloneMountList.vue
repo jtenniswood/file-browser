@@ -1,6 +1,5 @@
 <template>
-	<section v-if="paths.length" class="sidebar-mounts" aria-labelledby="standalone-mounts-title">
-		<h4 id="standalone-mounts-title" class="title is-3 mb-0 sidebar-group-title">{{ $t('Mount points') }}</h4>
+	<section v-if="paths.length" class="sidebar-mounts" :aria-label="$t('Mount points')">
 		<draggable v-model="mountItems" :animation="180" :delay="160" :delay-on-touch-only="true"
 			class="ul" ghost-class="sidebar-drag-ghost" item-key="path">
 			<template #item="{ element: item, index }">
