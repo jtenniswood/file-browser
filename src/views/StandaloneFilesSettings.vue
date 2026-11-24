@@ -33,7 +33,7 @@
 				<p v-if="notice" class="notification is-success is-light" role="status">{{ notice }}</p>
 				<section class="settings-section" aria-labelledby="preferences-title">
 					<h2 id="preferences-title" class="title is-3 mb-3" tabindex="-1">Preferences</h2>
-					<div class="settings-group">
+					<div class="settings-panel settings-pane">
 						<div class="settings-row preference-row">
 							<div>
 								<h3 id="appearance-title" class="setting_title">{{ $t('Appearance') }}</h3>
@@ -65,41 +65,43 @@
 				</section>
 				<section class="settings-section" aria-labelledby="account-title">
 					<h2 id="account-title" class="title is-3 mb-3" tabindex="-1">Your account</h2>
-					<div class="settings-group account-summary">
-						<span class="account-icon"><b-icon icon="account-outline" aria-hidden="true" /></span>
-						<strong>{{ user.username }}</strong>
-						<span class="tag is-rounded">{{ roleLabel(user.role) }}</span>
-					</div>
-					<div class="settings-columns">
-						<form class="settings-group" @submit.prevent="changePassword">
-							<h3 class="title is-6 mb-4">Change password</h3>
-							<input type="hidden" autocomplete="username" :value="user.username">
-							<label class="label" for="files-current-password">Current password</label>
-							<input id="files-current-password" v-model="currentPassword" class="input mb-3" type="password" autocomplete="current-password" required>
-							<label class="label" for="files-new-password">New password</label>
-							<input id="files-new-password" v-model="newPassword" class="input" type="password" autocomplete="new-password" minlength="12" required>
-							<p class="help mb-4">Use at least 12 characters.</p>
-							<button class="button is-primary" :disabled="busy" type="submit">Change password</button>
-						</form>
-						<div class="settings-group">
-							<div class="settings-row factor-heading">
-								<h3 class="title is-6 mb-0">Two-factor sign-in</h3>
-								<span class="tag is-rounded" :class="{ 'is-success is-light': user.totp_enabled }">{{ user.totp_enabled ? 'On' : 'Off' }}</span>
+					<div class="settings-panel">
+						<div class="settings-pane account-summary">
+							<span class="account-icon"><b-icon icon="account-outline" aria-hidden="true" /></span>
+							<strong>{{ user.username }}</strong>
+							<span class="tag is-rounded">{{ roleLabel(user.role) }}</span>
+						</div>
+						<div class="settings-columns">
+							<form class="settings-pane" @submit.prevent="changePassword">
+								<h3 class="setting_title mb-3">Change password</h3>
+								<input type="hidden" autocomplete="username" :value="user.username">
+								<label class="label" for="files-current-password">Current password</label>
+								<input id="files-current-password" v-model="currentPassword" class="input mb-3" type="password" autocomplete="current-password" required>
+								<label class="label" for="files-new-password">New password</label>
+								<input id="files-new-password" v-model="newPassword" class="input" type="password" autocomplete="new-password" minlength="12" required>
+								<p class="help settings-description mb-4">Use at least 12 characters.</p>
+								<button class="button is-primary" :disabled="busy" type="submit">Change password</button>
+							</form>
+							<div class="settings-pane">
+								<div class="settings-row factor-heading">
+									<h3 class="setting_title">Two-factor sign-in</h3>
+									<span class="tag is-rounded" :class="{ 'is-success is-light': user.totp_enabled }">{{ user.totp_enabled ? 'On' : 'Off' }}</span>
+								</div>
+								<TwoFactorPanel v-if="twoFactorOpen" @change="factorChanged" @done="twoFactorOpen = false" />
+								<button v-if="!twoFactorOpen" class="button" type="button" @click="twoFactorOpen = true">
+									{{ user.totp_enabled ? 'Manage two-factor sign-in' : 'Set up an authenticator app' }}
+								</button>
+								<button v-else class="button is-ghost mt-2" type="button" @click="twoFactorOpen = false">Close two-factor settings</button>
 							</div>
-							<TwoFactorPanel v-if="twoFactorOpen" @change="factorChanged" @done="twoFactorOpen = false" />
-							<button v-if="!twoFactorOpen" class="button" type="button" @click="twoFactorOpen = true">
-								{{ user.totp_enabled ? 'Manage two-factor sign-in' : 'Set up an authenticator app' }}
-							</button>
-							<button v-else class="button is-ghost mt-2" type="button" @click="twoFactorOpen = false">Close two-factor settings</button>
 						</div>
 					</div>
 				</section>
 				<section v-if="isAdmin" class="settings-section" aria-labelledby="users-title">
 					<h2 id="users-title" class="title is-3 mb-3" tabindex="-1">Users</h2>
 					<p class="help settings-description mb-4">All users can read and change files in the shared folder. Administrators can also manage accounts.</p>
-					<div class="settings-columns">
-						<div class="settings-group">
-							<h3 class="title is-6 mb-2">User accounts</h3>
+					<div class="settings-panel settings-columns">
+						<div class="settings-pane">
+							<h3 class="setting_title mb-3">User accounts</h3>
 							<p v-if="loadingUsers" role="status">Loading users…</p>
 							<button v-if="!loadingUsers && !users.length" class="button" type="button" @click="loadUsers">Reload users</button>
 							<ul>
@@ -114,8 +116,8 @@
 								</li>
 							</ul>
 						</div>
-						<form v-if="!selected" class="settings-group" @submit.prevent="addUser">
-							<h3 class="title is-6 mb-4">Add a user</h3>
+						<form v-if="!selected" class="settings-pane" @submit.prevent="addUser">
+							<h3 class="setting_title mb-3">Add a user</h3>
 							<label class="label" for="files-add-username">Username</label>
 							<input id="files-add-username" v-model="newUser.username" class="input mb-3" autocomplete="off" autocapitalize="none" minlength="3" maxlength="40" required>
 							<label class="label" for="files-add-password">Password</label>
@@ -129,8 +131,8 @@
 							</div>
 							<div><button class="button is-primary" type="submit" :disabled="busy">Add user</button></div>
 						</form>
-						<div v-else class="settings-group">
-							<h3 class="title is-6 mb-4">Manage {{ selected.username }}</h3>
+						<div v-else class="settings-pane">
+							<h3 class="setting_title mb-3">Manage {{ selected.username }}</h3>
 							<template v-if="confirmAction">
 								<p v-if="confirmAction === 'remove'" class="mb-4">Remove {{ selected.username }} from Files?</p>
 								<p v-else class="mb-4">Turn off two-factor sign-in for {{ selected.username }}?</p>
@@ -297,6 +299,7 @@ function factorChanged(value) {
 
 <style scoped>
 .settings-page {
+	--settings-inset: clamp(0.875rem, 2vw, 1.25rem);
 	display: grid;
 	grid-template:
 		"sidebar header" auto
@@ -508,7 +511,7 @@ function factorChanged(value) {
 
 .account-summary {
 	flex-wrap: wrap;
-	margin-block-end: 0.875rem;
+	border-block-end: 1px solid var(--casa-divider);
 }
 
 .account-icon {
@@ -529,20 +532,24 @@ function factorChanged(value) {
 .settings-columns {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
-	gap: 0.875rem;
-	align-items: start;
+	gap: 1px;
+	background: var(--casa-divider);
 }
 
-.settings-group {
-	min-width: 0;
-	padding: clamp(0.875rem, 2vw, 1.25rem);
+.settings-panel {
+	overflow: clip;
 	border: 1px solid var(--casa-border);
 	border-radius: 0.75rem;
-	background: var(--casa-surface);
 	box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
 }
 
-.settings-group :deep(.button) {
+.settings-pane {
+	min-width: 0;
+	padding: var(--settings-inset);
+	background: var(--casa-surface);
+}
+
+.settings-panel :deep(.button) {
 	height: auto;
 	min-height: 2.5em;
 	white-space: normal;
@@ -571,7 +578,11 @@ function factorChanged(value) {
 	}
 
 	.settings-nav-link {
-		padding: 0.5rem;
+		flex: 1 0 auto;
+		justify-content: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.375rem;
+		font-size: 0.8125rem;
 	}
 }
 </style>
