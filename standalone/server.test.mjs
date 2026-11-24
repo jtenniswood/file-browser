@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -40,6 +40,11 @@ it('standalone Files serves and updates only the configured data directory', asy
 	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
 	await writeFile(join(directory, 'private.txt'), 'outside the data folder')
 	await symlink(directory, join(dataDirectory, 'outside'))
+	const state = join(dataDirectory, '.files-state')
+	const previousEntry = join(state, 'e8dfcc3c-d292-478a-9d8f-fb961b52958c')
+	await mkdir(previousEntry, { recursive: true })
+	await writeFile(join(previousEntry, 'entry.json'), JSON.stringify({ path: '/DATA/old.txt', deleted_at: '2020-01-01T00:00:00Z' }))
+	await writeFile(join(previousEntry, 'data'), 'previously deleted file')
 	const options = { assetsDirectory, directory: dataDirectory, maxUploadBytes: 64 }
 	const { origin } = await startServer(options, t)
 	assert.equal((await fetch(`${origin}/v1/folder?path=/DATA`)).status, 401)
@@ -88,17 +93,18 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.match(contents, /Docs\/renamed\.txt/)
 	assert.match(contents, /Photos\/hello, world\.txt/)
 
-	assert.equal((await request('/v1/batch?to_trash=true', 'DELETE', ['/DATA/Docs'])).status, 200)
-	assert.deepEqual((await list()).map(item => item.name), ['Photos'])
-	const { items } = (await (await request('/v1/file/trash')).json()).data
-	assert.equal(items[0].path, '/DATA/Docs')
-	assert.equal((await request('/v1/file/trash/restore', 'POST', items)).status, 200)
+	assert.equal((await request('/v1/batch?to_trash=true', 'DELETE', ['/DATA/Docs'])).status, 400)
+	assert.equal((await request('/v1/batch', 'DELETE', ['/DATA/Docs', '/DATA'])).status, 403)
 	assert.equal(await readFile(join(dataDirectory, 'Docs/renamed.txt'), 'utf8'), 'hello')
-	assert.equal((await request('/v1/batch', 'DELETE', ['/DATA/Photos'])).status, 200)
-	assert.deepEqual((await list()).map(item => item.name), ['Docs'])
+	const stateBeforeDeletion = await readdir(state)
+	assert.equal((await request('/v1/batch', 'DELETE', ['/DATA/Docs', '/DATA/Docs/renamed.txt', '/DATA/Photos'])).status, 200)
+	assert.deepEqual(await list(), [])
+	assert.deepEqual(await readdir(state), stateBeforeDeletion)
+	assert.equal(await readFile(join(previousEntry, 'data'), 'utf8'), 'previously deleted file')
+	assert.equal((await request('/v1/file/trash')).status, 404)
 })
 
-it('saves a folder icon across renames, moves, restores and server restarts', async (t) => {
+it('saves a folder icon across renames, moves and server restarts', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-folder-icon-'))
 	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
 	const assetsDirectory = join(directory, 'assets')
@@ -128,10 +134,6 @@ it('saves a folder icon across renames, moves, restores and server restarts', as
 	assert.equal((await submit(origin, '/v1/batch/task', { item: [{ from: musicPath.replace('Projects', 'Work') }], type: 'move', to: '/DATA' }, cookie)).status, 200)
 	const movedPath = '/DATA/Music.svg'
 	assert.equal((await list(origin, cookie, '/DATA')).find(item => item.path === movedPath).folder_icon, 'music')
-	assert.equal((await submit(origin, '/v1/batch?to_trash=true', [movedPath], cookie, 'DELETE')).status, 200)
-	const { data } = await (await apiRequest(origin, '/v1/file/trash', { cookie })).json()
-	assert.equal(data.items[0].folder_icon, 'music')
-	assert.equal((await submit(origin, '/v1/file/trash/restore', data.items, cookie)).status, 200)
 	await new Promise(resolve => server.close(resolve))
 
 	const restarted = await startServer(options, t)
@@ -311,4 +313,39 @@ it('sets up a single administrator, protects files and manages members and their
 	for (let attempt = 0; attempt < 12; attempt++)
 		assert.equal((await incorrectLogin()).status, 401)
 	assert.equal((await incorrectLogin()).status, 429)
+})
+
+it('marks exact Samba share roots and refreshes them as host settings change', async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'files-samba-'))
+	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
+	const assetsDirectory = join(directory, 'assets')
+	const dataDirectory = join(directory, 'data')
+	await mkdir(assetsDirectory)
+	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
+	await mkdir(join(dataDirectory, 'Documents', 'Nested'), { recursive: true })
+	await mkdir(join(dataDirectory, 'Documents backup'))
+	await writeFile(join(dataDirectory, 'report.txt'), 'report')
+
+	let paths = ['Documents', 'report.txt']
+	const readSambaShares = vi.fn(async () => paths)
+	const { origin } = await startServer({ assetsDirectory, directory: dataDirectory, readSambaShares }, t)
+	const route = '/v1/folder?path=/DATA'
+	assert.equal((await apiRequest(origin, route)).status, 401)
+	assert.equal(readSambaShares.mock.calls.length, 0)
+	const cookie = cookieOf(await submit(origin, '/v1/auth/setup', account))
+	const badges = async (path = '') => {
+		const response = await apiRequest(origin, route + path, { cookie })
+		assert.equal(response.status, 200)
+		const { data } = await response.json()
+		return data.content.filter(item => item.extensions?.samba_shared).map(item => item.name)
+	}
+
+	assert.deepEqual(await badges(), ['Documents'])
+	assert.deepEqual(await badges('/Documents'), [])
+	paths = ['Documents/Nested']
+	assert.deepEqual(await badges(), [])
+	assert.deepEqual(await badges('/Documents'), ['Nested'])
+	readSambaShares.mockRejectedValueOnce(new Error('Samba unavailable'))
+	assert.deepEqual(await badges('/Documents'), [])
+	assert.deepEqual(await badges('/Documents'), ['Nested'])
 })

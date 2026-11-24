@@ -59,14 +59,12 @@
 						</div>
 
 						<!-- Bottom Action Start -->
-						<!-- the transfer between devices, the shares and the trash are the owner's -->
+						<!-- Device transfers and shares are available to the owner. -->
 						<div v-if="!isAccount || $standaloneFiles" class="bottom-area">
 							<drop-entry-button v-if="!$standaloneFiles" :active="pageType == `drop`" :title="$t('FilesDrop')"
 								@open="showDropPage"></drop-entry-button>
 							<share-entry-button v-if="!$standaloneFiles" :active="pageType == `share`"
 								@open="showSharedList"></share-entry-button>
-							<trash-entry-button :active="pageType == `trash`"
-								@open="showTrash"></trash-entry-button>
 							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="is-flex list-item new-list-item">
 								<div class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
 									<b-icon aria-hidden="true" icon="settings-outline" pack="casa" />
@@ -245,9 +243,6 @@
 				</template>
 				<!-- Drop Page End -->
 
-				<template v-else-if="pageType == `trash`">
-					<trash-page @close="$emit('close')"></trash-page>
-				</template>
 				<!-- Main Content End -->
 			</section>
 			<!-- Modal-Card Body End -->
@@ -267,7 +262,6 @@ import TreeList from './sidebar/TreeList.vue'
 import MountList from './sidebar/MountList.vue'
 import ShareEntryButton from './shared/ShareEntryButton.vue'
 import ShareListPage from './shared/ShareListPage.vue'
-import TrashEntryButton from './trash/TrashEntryButton.vue'
 
 import SelectShareModal from './shared/SelectShareModal.vue'
 import ShareDetial from './shared/ShareDetial.vue'
@@ -336,8 +330,6 @@ export default {
 		// Shared
 		ShareEntryButton,
 		ShareListPage,
-		TrashEntryButton,
-		TrashPage: defineAsyncComponent(() => import('./trash/TrashPage.vue')),
 		MountList,
 		MountActionButton,
 		// Drop
@@ -503,7 +495,6 @@ export default {
 					this.destroyedAction()
 					break
 				case 'drop':
-				case 'trash':
 					this.destroyedAction()
 					break
 				default:
@@ -606,11 +597,6 @@ export default {
 
 		showDropPage() {
 			this.pageType = 'drop'
-			this.hideMobileSidebar()
-		},
-
-		showTrash() {
-			this.pageType = 'trash'
 			this.hideMobileSidebar()
 		},
 
@@ -1114,19 +1100,16 @@ export default {
 			this.confirmDelete(this.selectedArray, () => this.handleClose())
 		},
 
-		// shared by the toolbar and the right-click menu: a reliable modal, not an inline confirm the menu can dismiss before the second click
+		// Shared by the toolbar and the right-click menu.
 		confirmDelete(items, afterConfirm) {
 			this.$buefy.dialog.confirm({
-				title: this.$t('Deleting files'),
-				// 30: trash.Retention in the core
-				message: `${this.$t('These items go to the trash, where you can restore them for {days} days.', { days: 30 })}
-					<label class="checkbox is-flex is-align-items-center mt-4"><input id="deletePermanently" class="mr-2" type="checkbox">${this.$t('Delete permanently instead: this cannot be undone')}</label>`,
-				confirmText: this.$t('Delete'),
+				title: this.$t('Delete'),
+				message: this.$t('The selected files and folders will be permanently deleted.'),
+				confirmText: this.$t('Delete permanently'),
 				type: 'is-danger',
 				hasIcon: true,
 				onConfirm: () => {
-					const permanent = document.getElementById('deletePermanently')?.checked === true
-					this.deleteItem(items, permanent)
+					this.deleteItem(items)
 					if (afterConfirm) {
 						afterConfirm()
 					}

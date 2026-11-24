@@ -1,3 +1,27 @@
+import { automaticFolderIcon } from '../automaticFolderIcon.js'
+
+const miniFolderIcons = {
+	application: 'display-applications-outline',
+	default: 'folder-outline',
+	documents: 'files-outline',
+	download: 'downloads-outline',
+	hdd: 'storage-other',
+	pictures: 'gallery-outline',
+	root: 'root-outline',
+	usb: 'usb-outline',
+	video: 'media-outline',
+}
+
+function shortcutIcon(item, entry, isFile) {
+	// Keep explicit icons from existing shortcuts, including those set by the pin-sidepanel mod.
+	if (item.icon && item.icon !== 'folder' && (isFile || item.icon !== miniFolderIcons.default))
+		return item.icon
+	if (isFile)
+		return 'files-outline'
+
+	return entry ? miniFolderIcons[automaticFolderIcon(entry)] : miniFolderIcons.default
+}
+
 export const parentOf = path => path.replace(/\/[^/]*$/, '') || '/'
 
 export const SIDEBAR_ORDER_STORAGE_KEY = 'casaos-files-sidebar-order'
@@ -47,8 +71,7 @@ export async function checkStarred(items, listFolder) {
 		const entry = listings[parentOf(item.path)].find(e => e.path === item.path && Boolean(e.is_dir) !== isFile)
 		return {
 			...item,
-			// an icon picked elsewhere (the pin-sidepanel mod) is kept; 'folder' is the old saved default
-			icon: !item.icon || item.icon === 'folder' ? (isFile ? 'files-outline' : 'folder-outline') : item.icon,
+			icon: shortcutIcon(item, entry, isFile),
 			pack: 'casa',
 			visible: true,
 			unavailable: !entry,

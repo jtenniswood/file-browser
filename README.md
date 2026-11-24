@@ -1,6 +1,6 @@
 # File Browser
 
-File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, and edit files, as well as move, copy, star, and trash them.
+File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, edit, move, copy, star, and permanently delete files.
 
 ## Install with Docker
 
@@ -57,7 +57,56 @@ docker compose pull
 docker compose up -d --wait
 ```
 
-Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep accounts, starred items, and trash. Files in the trash are kept for 30 days. Run one container per data folder.
+Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep accounts and starred items. Run one container per data folder.
+
+After an upgrade, any files still in the former Trash remain in the hidden `.files-state` directory on the host. In each entry folder, `entry.json` records the original path and `data` holds the file or folder. You can copy the contents back from the host.
+
+## Show Samba shares on folders
+
+On a Linux Samba host, File Browser can show a green **Shared** badge in the grid and list. The badge marks the folder configured as the share root. An enabled share can have its own access permissions, and the badge reflects configuration even when the Samba server is stopped.
+
+The integration reads configured shares with `testparm` and enabled usershares with `net usershare info --long`. The Files user needs read access to the Samba configuration and any enabled usershare directory. Shares with per-user paths such as `%U` are skipped. Reload the folder view after changing the Samba configuration.
+
+### Docker
+
+Run the small inventory service on the Samba host so it can read the host's configuration, including its include files. A private Unix socket passes relative folder paths to the container. Use the same numeric user for the service as `FILES_UID` in `.env`.
+
+1. On the Samba host, make sure `testparm`, `net`, and Node.js 24 are available. On Debian or Ubuntu, the commands are provided by `samba-common-bin`.
+2. From the File Browser checkout, create `/etc/systemd/system/files-samba.service` with the following contents. Replace the user, absolute data directory, Node executable, and checkout path with the values on your host. The data directory must be the same host directory as `FILES_DIRECTORY` in `.env`.
+
+   ```ini
+   [Unit]
+   Description=File Browser Samba inventory
+   After=local-fs.target
+
+   [Service]
+   User=YOUR_FILES_USER
+   RuntimeDirectory=files-samba
+   RuntimeDirectoryMode=0700
+   Environment="FILES_DIRECTORY=/srv/files"
+   Environment=FILES_SAMBA_SOCKET=/run/files-samba/shares.sock
+   ExecStart=/usr/bin/node /absolute/path/to/file-browser/standalone/samba-host.mjs
+   Restart=on-failure
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   Add `Environment="FILES_SAMBA_CONFIG=/absolute/path/to/smb.conf"` if your Samba installation uses a custom configuration file.
+
+3. Start the inventory service and apply the Compose override.
+
+   ```sh
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now files-samba.service
+   docker compose -f compose.yaml -f compose.samba.yaml up -d --wait
+   ```
+
+If the badges are missing, check `sudo journalctl -u files-samba.service -n 50` and confirm the service and container use the same UID and point at the same data directory.
+
+### Running File Browser directly on the host
+
+Start the app with `FILES_SAMBA=1` and `FILES_DIRECTORY` set to the host data directory. Set `FILES_SAMBA_CONFIG` if Samba uses a custom configuration file.
 
 ## Build from source
 

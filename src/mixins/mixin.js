@@ -4,10 +4,8 @@ import escape from 'lodash/escape'
 import union from 'lodash/union'
 import copy from 'clipboard-copy'
 import { renderSize } from './file_utils'
+import { automaticFolderIcon } from '@/components/filebrowser/automaticFolderIcon'
 import { customFolderIcon } from '@/components/filebrowser/folderIcons'
-
-// the core's answer when an item cannot go to the trash (common_err.TRASH_UNAVAILABLE)
-const TRASH_UNAVAILABLE = 60007
 
 const typeMap = {
 	'image-x-generic': ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff'],
@@ -94,27 +92,7 @@ export const mixin = {
 				const custom = customFolderIcon(item.folder_icon)
 				if (custom)
 					return custom
-				if (item.type == 'application') {
-					icon = 'folder-application'
-				} else if (item.type == 'usb') {
-					icon = 'folder-usb'
-				} else if (['sata', 'nvme', 'spi', 'sas'].includes(item.type)) {
-					icon = 'folder-hdd'
-				} else if (item.type == 'home') {
-					icon = 'folder-root'
-				} else if (item.name == 'Media') {
-					icon = 'folder-video'
-				} else if (item.name == 'Downloads') {
-					icon = 'folder-download'
-				} else if (item.name == 'Documents') {
-					icon = 'folder-documents'
-				} else if (item.name == 'Gallery') {
-					icon = 'folder-pictures'
-				} else if (item.name == 'AppData') {
-					icon = 'folder-application'
-				} else {
-					icon = 'folder-default'
-				}
+				icon = `folder-${automaticFolderIcon(item)}`
 			} else {
 				const ext = this.getFileExt(item)
 				Object.keys(typeMap).forEach((_type) => {
@@ -279,12 +257,11 @@ export const mixin = {
 		},
 
 		/**
-		 * @description: Delete File: to the trash of its disk, or for good when permanent
+		 * @description: Permanently delete the selected files or folders
 		 * @param {Object,Array} items
-		 * @param {boolean} permanent
 		 * @return {void}
 		 */
-		deleteItem(items, permanent = false) {
+		deleteItem(items) {
 			const deleteShare = async (shareId) => {
 				try {
 					await this.$api.samba.deleteShare(shareId)
@@ -301,19 +278,6 @@ export const mixin = {
 				}
 			}
 
-			// a disk that is read-only, or a trash folder that is not ours: say which, and offer the permanent delete of those only
-			const offerPermanentDelete = (refused) => {
-				this.$buefy.dialog.confirm({
-					title: this.$t('Cannot move to the trash'),
-					message: `${this.$t('These items cannot go to the trash:')}<ul class="my-3">${refused.map(r => `<li><b>${escape(r.path)}</b><br><span class="is-size-7">${escape(r.reason)}</span></li>`).join('')}</ul>${this.$t('Delete them permanently? This cannot be undone.')}`,
-					confirmText: this.$t('Delete permanently'),
-					type: 'is-danger',
-					hasIcon: true,
-					onConfirm: () => this.deleteItem(refused.map(r => ({ path: r.path })), true),
-				})
-			}
-
-			// closed, not toggled: after a refusal this runs twice, and a toggle would open the menu again
 			const reload = () => {
 				if (this.$refs.dropDown !== undefined) {
 					this.$refs.dropDown.isActive = false
@@ -340,7 +304,7 @@ export const mixin = {
 
 			const deleteItems = async (paths) => {
 				try {
-					const res = await this.$api.batch.delete(JSON.stringify(paths), !permanent)
+					const res = await this.$api.batch.delete(JSON.stringify(paths))
 					if (res.data.success === 200) {
 						await removed(paths)
 					} else {
@@ -351,21 +315,10 @@ export const mixin = {
 					}
 				} catch (e) {
 					const data = e?.response?.data
-					if (!permanent && data?.success === TRASH_UNAVAILABLE) {
-						// the others went to the trash
-						const refused = data.data || []
-						const kept = refused.map(r => r.path)
-						await removed(paths.filter(p => !kept.includes(p)))
-						offerPermanentDelete(refused)
-						return
-					}
 					if (data?.message) {
 						this.$buefy.toast.open({ message: escape(data.message), type: 'is-danger' })
 					}
-					if (!permanent) {
-						// the core moves what it can before it answers an error
-						reload()
-					}
+					reload()
 					console.log(`${e} in deleteItem`)
 				}
 			}
