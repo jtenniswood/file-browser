@@ -78,10 +78,6 @@
 					<b-dropdown-item key="file-context5" aria-role="menuitem" @click="operate('copy', items)">
 						{{ $t('Copy') }}
 					</b-dropdown-item>
-					<b-dropdown-item v-if="showSingleEdit && isWallpaperType" aria-role="menuitem"
-						@click="setAsWallpaper(item)">
-						{{ $t('Set as wallpaper') }}
-					</b-dropdown-item>
 
 					<template v-if="item.is_dir && !filePanel.isAccount">
 						<hr class="dropdown-divider">
@@ -111,7 +107,7 @@
 <script>
 import has from 'lodash/has'
 import ShareAccessModal from '../shared/ShareAccessModal.vue'
-import { mixin, wallpaperType } from '@/mixins/mixin'
+import { mixin } from '@/mixins/mixin'
 
 export default {
 	mixins: [mixin],
@@ -134,9 +130,6 @@ export default {
 	computed: {
 		close() {
 			return this.item == undefined
-		},
-		isWallpaperType() {
-			return this.item.is_dir ? false : wallpaperType.includes(this.getFileExt(this.item))
 		},
 		isShared() {
 			const extensions = this.item.extensions
