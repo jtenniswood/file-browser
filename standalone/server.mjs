@@ -344,9 +344,9 @@ export async function createFilesServer({
 			const known = {
 				ENOENT: [404, 'The file or folder was not found.'],
 				EEXIST: [409, 'A file or folder already has that name.'],
-				EACCES: [403, 'The server cannot access that file or folder.'],
-				EPERM: [403, 'The server cannot change that file or folder.'],
-				EROFS: [403, 'The server folder is read-only.'],
+				EACCES: [403, 'Files was denied access to this file or folder. Check the Files service account’s permissions on the server.'],
+				EPERM: [403, 'The server blocked this action. Check whether the Files service account is allowed to make this change.'],
+				EROFS: [403, 'Files cannot save changes here because the filesystem is read-only.'],
 				ENOSPC: [507, 'The server disk is full.'],
 				EXDEV: [409, 'The destination must be on the same filesystem.'],
 			}

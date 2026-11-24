@@ -19,6 +19,18 @@ export class RequestError extends Error {
 	}
 }
 
+async function withPermissionMessage(operation, action, guidance) {
+	try {
+		return await operation()
+	} catch (error) {
+		if (error.code === 'EROFS')
+			throw new RequestError(403, `Files could not ${action()} because the filesystem is read-only.`)
+		if (error.code === 'EACCES' || error.code === 'EPERM')
+			throw new RequestError(403, `Files could not ${action()}. ${guidance}`)
+		throw error
+	}
+}
+
 function partsOf(path) {
 	if (path === rootPath)
 		return []
@@ -361,13 +373,17 @@ export async function openStorage(directory) {
 			}
 			return entries
 		},
-		create: (path, folder) => change(async () => {
-			const target = await newEntry(path)
-			if (folder)
-				await mkdir(target)
-			else
-				await writeFile(target, '', { flag: 'wx' })
-		}),
+		create: (path, folder) => change(() => withPermissionMessage(
+			async () => {
+				const target = await newEntry(path)
+				if (folder)
+					await mkdir(target)
+				else
+					await writeFile(target, '', { flag: 'wx' })
+			},
+			() => `create a ${folder ? 'folder' : 'file'} in “${dirname(path)}”`,
+			'Check that the Files service account has write access to this folder on the server.',
+		)),
 		setFolderIcon: (path, icon) => change(async () => {
 			if (icon !== null && (typeof icon !== 'string' || !Object.hasOwn(folderIconLabels, icon)))
 				throw new RequestError(400, 'Choose a folder icon from the list.')
@@ -401,7 +417,13 @@ export async function openStorage(directory) {
 				await rename(temporary, target)
 			})
 		}),
-		batchTask: task => change(() => batchTask(task)),
+		batchTask: task => change(() => withPermissionMessage(
+			() => batchTask(task),
+			() => `${task.type} the selection to “${task.to}”`,
+			task.type === 'move'
+				? 'Check that the Files service account has write access to the source and destination folders on the server.'
+				: 'Check that the Files service account can read the source and write to the destination folder on the server.',
+		)),
 		remove: paths => change(() => remove(paths)),
 		shortcuts: async () => (await optionalStat(shortcutFile)) ? JSON.parse(await readFile(shortcutFile, 'utf8')) : [],
 		setShortcuts: items => change(async () => {
