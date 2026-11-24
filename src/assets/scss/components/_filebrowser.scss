@@ -58,12 +58,9 @@
             &.files-folder-header {
                 padding-bottom: 1.25rem;
 
-                .action-btn {
-                    .file-dropdown,
-                    .dropdown-trigger {
-                        display: flex;
-                    }
-                }
+                // Keep the Sort by menu above the sticky list header (z-index 20).
+                position: relative;
+                z-index: 21;
             }
 
             .input.is-rounded {
@@ -663,9 +660,6 @@
     .tool-bar {
         height: 1.75rem;
         padding: 0 1.5rem;
-        // Above the list's sticky header (z-index 20), so the Sort by menu opens over it.
-        position: relative;
-        z-index: 21;
     }
 
     .scroll-container {
