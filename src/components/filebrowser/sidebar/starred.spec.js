@@ -57,6 +57,28 @@ describe('the Starred list in the sidebar', () => {
 		expect(list[0].icon).toBe('media-outline')
 	})
 
+	it('uses the matching small icons for old and new folder pins, including folders nested elsewhere', async () => {
+		const folders = [
+			['Documents', 'files-outline'],
+			['Downloads', 'downloads-outline'],
+			['Gallery', 'gallery-outline'],
+			['Media', 'media-outline'],
+			['AppData', 'display-applications-outline'],
+			['Syncthing', 'folder-outline'],
+		]
+		const entries = folders.map(([name]) => ({ name, path: `/DATA/Example/${name}`, is_dir: true }))
+		const pins = entries.map(({ name, path }, index) => ({
+			name,
+			path,
+			type: 'folder',
+			icon: ['folder', 'folder-outline', undefined][index % 3],
+		}))
+
+		const list = await checkStarred(pins, async () => entries)
+
+		expect(list.map(item => item.icon)).toEqual(folders.map(([, icon]) => icon))
+	})
+
 	it('takes the root as the parent of a top folder', () => {
 		expect(parentOf('/DATA')).toBe('/')
 		expect(parentOf('/DATA/Media/a.txt')).toBe('/DATA/Media')
