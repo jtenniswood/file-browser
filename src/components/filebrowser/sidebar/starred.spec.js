@@ -98,7 +98,7 @@ describe('the Starred list in the sidebar', () => {
 	})
 
 	it('has its words in English and in French', () => {
-		for (const key of ['Starred', 'Add to Starred', 'Remove from Starred', 'Not available: it may have been moved or deleted']) {
+		for (const key of ['Pinned', 'Add to Pinned', 'Unpin', 'Not available: it may have been moved or deleted']) {
 			expect(en[key]).toBeTruthy()
 			expect(fr[key]).toBeTruthy()
 		}

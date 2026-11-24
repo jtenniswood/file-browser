@@ -24,7 +24,7 @@
 				<div v-if="!$standaloneFiles || isRootorDATA" class="notification pl-4 pri-height">
 					<b-field>
 						<b-checkbox v-show="isRootorDATA" v-model="shortcut" type="is-info">
-							{{ $t('Add to Starred') }}
+							{{ $t('Add to Pinned') }}
 						</b-checkbox>
 					</b-field>
 					<b-field v-if="!$standaloneFiles">
