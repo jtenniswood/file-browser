@@ -1473,7 +1473,7 @@ export default {
 }
 
 .icon-size-slider {
-	width: min(100%, 7.5rem);
+	width: min(100%, 4rem);
 	height: 2rem;
 	margin: 0;
 	cursor: pointer;
