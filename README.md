@@ -1,6 +1,6 @@
-# File Browser
+# Files
 
-File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, edit, move, copy, star, and permanently delete files.
+Files is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, edit, move, copy, star, and permanently delete files.
 
 ## Install with Docker
 
@@ -14,7 +14,7 @@ test -f .env || printf 'FILES_UID=%s\nFILES_GID=%s\n' "$(id -u)" "$(id -g)" > .e
 docker compose up -d --wait
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host and follow the prompts to create the first administrator. File Browser shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host and follow the prompts to create the first administrator. Files shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
 
 The Compose file pulls `ghcr.io/jtenniswood/files:latest` from GitHub Container Registry. [View available image tags](https://github.com/jtenniswood/files/pkgs/container/files).
 
@@ -26,7 +26,7 @@ Set these options in `.env` beside `compose.yaml`, then run `docker compose up -
 | --- | --- | --- |
 | `FILES_DIRECTORY` | Host folder to manage. Use an existing absolute path to select a different folder. | `./files-data` |
 | `FILES_PUBLISH_PORT` | Port on the Docker host. | `8080` |
-| `FILES_BIND_ADDRESS` | IP address on the Docker host where File Browser is available. | `127.0.0.1` |
+| `FILES_BIND_ADDRESS` | IP address on the Docker host where Files is available. | `127.0.0.1` |
 | `FILES_PUBLIC_ORIGIN` | Optional HTTPS address for a reverse proxy, such as `https://files.example.com`. | Unset |
 | `FILES_UID`, `FILES_GID` | Numeric user and group the container runs as. The install commands set them to your user and group. | `1000` |
 | `FILES_MAX_UPLOAD_BYTES` | Maximum upload size per file. | `10737418240` (10 GiB) |
@@ -40,7 +40,7 @@ Set `FILES_BIND_ADDRESS` in `.env` to the Docker host’s local network IP addre
 
 If you choose to use an HTTPS reverse proxy, set `FILES_PUBLIC_ORIGIN` to its HTTPS address and preserve the original `Host` header. Set the proxy’s upload size limit and timeouts for the files you expect.
 
-If you enable network access before setting up the first administrator, the setup screen asks for a one-time code. Run `docker compose logs files` on the host and look for **File Browser setup code**. The code is generated again if you restart before finishing setup.
+If you enable network access before setting up the first administrator, the setup screen asks for a one-time code. Run `docker compose logs files` on the host and look for **Files setup code**. The code is generated again if you restart before finishing setup.
 
 ## Manage accounts
 
@@ -63,7 +63,7 @@ After an upgrade, any files still in the former Trash remain in the hidden `.fil
 
 ## Show Samba shares on folders
 
-On a Linux Samba host, File Browser can show a green **Shared** badge in the grid and list. The badge marks the folder configured as the share root. An enabled share can have its own access permissions, and the badge reflects configuration even when the Samba server is stopped.
+On a Linux Samba host, Files can show a green **Shared** badge in the grid and list. The badge marks the folder configured as the share root. An enabled share can have its own access permissions, and the badge reflects configuration even when the Samba server is stopped.
 
 The integration reads configured shares with `testparm` and enabled usershares with `net usershare info --long`. The Files user needs read access to the Samba configuration and any enabled usershare directory. Shares with per-user paths such as `%U` are skipped. Reload the folder view after changing the Samba configuration.
 
@@ -72,11 +72,11 @@ The integration reads configured shares with `testparm` and enabled usershares w
 Run the small inventory service on the Samba host so it can read the host's configuration, including its include files. A private Unix socket passes relative folder paths to the container. Use the same numeric user for the service as `FILES_UID` in `.env`.
 
 1. On the Samba host, make sure `testparm`, `net`, and Node.js 24 are available. On Debian or Ubuntu, the commands are provided by `samba-common-bin`.
-2. From the File Browser checkout, create `/etc/systemd/system/files-samba.service` with the following contents. Replace the user, absolute data directory, Node executable, and checkout path with the values on your host. The data directory must be the same host directory as `FILES_DIRECTORY` in `.env`.
+2. From the Files checkout, create `/etc/systemd/system/files-samba.service` with the following contents. Replace the user, absolute data directory, Node executable, and checkout path with the values on your host. The data directory must be the same host directory as `FILES_DIRECTORY` in `.env`.
 
    ```ini
    [Unit]
-   Description=File Browser Samba inventory
+   Description=Files Samba inventory
    After=local-fs.target
 
    [Service]
@@ -104,7 +104,7 @@ Run the small inventory service on the Samba host so it can read the host's conf
 
 If the badges are missing, check `sudo journalctl -u files-samba.service -n 50` and confirm the service and container use the same UID and point at the same data directory.
 
-### Running File Browser directly on the host
+### Running Files directly on the host
 
 Start the app with `FILES_SAMBA=1` and `FILES_DIRECTORY` set to the host data directory. Set `FILES_SAMBA_CONFIG` if Samba uses a custom configuration file.
 

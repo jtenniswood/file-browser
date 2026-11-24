@@ -36,7 +36,7 @@ describe('files in a tab of their own', () => {
 	it('shows the current folder in the title while the files tab is active', async () => {
 		const state = reactive({ currentPath: '/DATA/Family Photos' })
 		const showFiles = ref(true)
-		document.title = 'File Browser'
+		document.title = 'Files'
 		const wrapper = mount({
 			render: () => h(KeepAlive, () => showFiles.value ? h(FilesTab) : null),
 		}, {
@@ -52,18 +52,18 @@ describe('files in a tab of their own', () => {
 
 		showFiles.value = false
 		await nextTick()
-		expect(document.title).toBe('File Browser')
+		expect(document.title).toBe('Files')
 
 		state.currentPath = '/'
 		await nextTick()
-		expect(document.title).toBe('File Browser')
+		expect(document.title).toBe('Files')
 
 		showFiles.value = true
 		await nextTick()
 		expect(document.title).toBe('Files · Root')
 
 		wrapper.unmount()
-		expect(document.title).toBe('File Browser')
+		expect(document.title).toBe('Files')
 	})
 
 	it('asks before the page unloads while an upload runs, and only then', () => {

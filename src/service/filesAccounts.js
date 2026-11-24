@@ -9,7 +9,7 @@ export async function filesAccountRequest(path, { method = 'GET', body } = {}) {
 	})
 	const result = await response.json().catch(() => null)
 	if (!response.ok || !result) {
-		const error = new Error(result?.message || 'File Browser could not complete the request. Try again.')
+		const error = new Error(result?.message || 'Files could not complete the request. Try again.')
 		error.status = response.status
 		if (response.status === 401 && path !== 'login')
 			window.dispatchEvent(new Event(filesSessionExpired))

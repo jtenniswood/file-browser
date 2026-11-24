@@ -282,7 +282,11 @@ it('sets up a single administrator, protects files and manages members and their
 	assert.equal((await submit(origin, manageUsers, { ...makeMember, username: 'other' }, memberCookie)).status, 403)
 	assert.equal((await submit(origin, `${secondFactor}enable`, { code: '000000' }, memberCookie)).status, 410)
 	const { data: enrollment } = await (await submit(origin, `${secondFactor}setup`, { password: member.password }, memberCookie)).json()
-	assert.match(enrollment.otpauth_url, /^otpauth:\/\/totp\//)
+	const authenticatorUrl = new URL(enrollment.otpauth_url)
+	assert.equal(authenticatorUrl.protocol, 'otpauth:')
+	assert.equal(authenticatorUrl.hostname, 'totp')
+	assert.equal(decodeURIComponent(authenticatorUrl.pathname), `/Files:${member.username}`)
+	assert.equal(authenticatorUrl.searchParams.get('issuer'), 'Files')
 	const enabled = await submit(origin, `${secondFactor}enable`, { code: totpCode(enrollment.secret, Date.now() - 30_000) }, memberCookie)
 	assert.equal(enabled.status, 200)
 	const previousCookie = memberCookie

@@ -85,7 +85,7 @@
 					<div v-else class="settings-panel">
 						<h3 class="title is-6 mb-4">Manage {{ selected.username }}</h3>
 						<template v-if="confirmAction">
-							<p v-if="confirmAction === 'remove'" class="mb-4">Remove {{ selected.username }} from File Browser?</p>
+							<p v-if="confirmAction === 'remove'" class="mb-4">Remove {{ selected.username }} from Files?</p>
 							<p v-else class="mb-4">Turn off two-factor sign-in for {{ selected.username }}?</p>
 							<div class="buttons mb-0">
 								<button class="button is-danger" type="button" :disabled="busy" @click="confirmChange">

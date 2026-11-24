@@ -17,6 +17,6 @@ This distribution includes a subset of Google's Material Icons Outlined font,
 available under the Apache License, Version 2.0.
 Source: https://github.com/google/material-design-icons
 
-File Browser is a standalone distribution of the Files interface from ReCasaOS
+Files is a standalone distribution of the Files interface from ReCasaOS
 CasaOS-UI, with changes to the Docker packaging and the use of system fonts.
 Source snapshot: https://github.com/jtenniswood/CasaOS-UI/tree/db044fb0fe3dcf8a124ed69e10d112bdfcfbcf62

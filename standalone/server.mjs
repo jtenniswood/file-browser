@@ -258,7 +258,7 @@ export async function createFilesServer({
 				return json(response, 200, await accounts.handle(route, body, request, response, secure))
 			}
 			if (/^\/v\d+\//.test(pathname) && !accounts.user(request))
-				throw new RequestError(401, 'Sign in to File Browser.')
+				throw new RequestError(401, 'Sign in to Files.')
 
 			const path = searchParams.get('path')
 			let data = null
@@ -384,7 +384,7 @@ async function start() {
 		directAddress,
 		publicOrigin: env.FILES_PUBLIC_ORIGIN,
 		setupCode,
-		onSetupCode: code => process.stdout.write(`File Browser setup code: ${code}\n`),
+		onSetupCode: code => process.stdout.write(`Files setup code: ${code}\n`),
 		maxUploadBytes: positiveInteger(env.FILES_MAX_UPLOAD_BYTES, 'FILES_MAX_UPLOAD_BYTES', 10 * 1024 ** 3),
 	})
 	server.listen(port, host, () => console.log(`Files is listening on http://${host}:${port}`))
