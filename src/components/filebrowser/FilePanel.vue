@@ -67,6 +67,9 @@
 								@open="showSharedList"></share-entry-button>
 							<trash-entry-button :active="pageType == `trash`"
 								@open="showTrash"></trash-entry-button>
+							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="files-theme is-flex is-align-items-center">
+								<b-icon aria-hidden="true" icon="cog-outline" size="is-small" /><span>{{ $t('Settings') }}</span>
+							</RouterLink>
 							<label v-if="$standaloneFiles" class="files-theme is-flex is-align-items-center is-justify-content-space-between">
 								<span>{{ $t('Appearance') }}</span>
 								<span class="select is-small">

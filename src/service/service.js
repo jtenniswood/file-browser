@@ -3,6 +3,7 @@ import { ToastProgrammatic } from 'buefy'
 import router from '@/router'
 import store from '@/store'
 import i18n from '@/plugins/i18n'
+import { filesSessionExpired } from './filesAccounts'
 
 const axiosBaseURL = ``
 const standaloneFiles = process.env.VUE_APP_STANDALONE_FILES === '1'
@@ -117,8 +118,11 @@ instance.interceptors.response.use(
 		const originalConfig = error?.config
 		const refresh_token = localStorage.getItem('refresh_token')
 		explainRefusal(error)
-		if (standaloneFiles)
+		if (standaloneFiles) {
+			if (error?.response?.status === 401)
+				window.dispatchEvent(new Event(filesSessionExpired))
 			return Promise.reject(error)
+		}
 		if (originalConfig?.url !== '/users/register' && error?.response?.status === 401) {
 			// The refresh itself was refused, or a call was refused again with the token it
 			// was replayed with: no newer token is coming. The refresh used to be parked in

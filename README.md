@@ -14,7 +14,7 @@ test -f .env || printf 'FILES_UID=%s\nFILES_GID=%s\n' "$(id -u)" "$(id -g)" > .e
 docker compose up -d --wait
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host. File Browser shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host and follow the prompts to create the first administrator. File Browser shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
 
 The Compose file pulls `ghcr.io/jtenniswood/files:latest` from GitHub Container Registry. [View available image tags](https://github.com/jtenniswood/files/pkgs/container/files).
 
@@ -36,9 +36,17 @@ The container user needs permission to read and write the host folder. If the se
 
 ## Connect from another device
 
-Set `FILES_BIND_ADDRESS` in `.env` to the Docker host’s local network IP address, for example `192.168.1.50`. Run `docker compose up -d --wait`, then open `http://192.168.1.50:8080` from another device on the same network. Use your own IP address and the port you configured. Anyone who can reach that address has full access to the configured folder, so use it on a trusted network.
+Set `FILES_BIND_ADDRESS` in `.env` to the Docker host’s local network IP address, for example `192.168.1.50`. Run `docker compose up -d --wait`, then open `http://192.168.1.50:8080` from another device on the same network. Use your own IP address and the port you configured. Direct HTTP does not encrypt passwords or files in transit, so use it on a trusted network.
 
 If you choose to use an HTTPS reverse proxy, set `FILES_PUBLIC_ORIGIN` to its HTTPS address and preserve the original `Host` header. Set the proxy’s upload size limit and timeouts for the files you expect.
+
+If you enable network access before setting up the first administrator, the setup screen asks for a one-time code. Run `docker compose logs files` on the host and look for **File Browser setup code**. The code is generated again if you restart before finishing setup.
+
+## Manage accounts
+
+Open **Settings** from the Files sidebar. Administrators can create members or other administrators, reset another user's password or two-factor sign-in, and remove users. All users have read and write access to the same **DATA** folder.
+
+Users can change their own password and set up two-factor sign-in with any compatible authenticator app. Save the recovery codes when they appear so you can sign in if you lose the app. Each code works once.
 
 ## Update, stop, or back up
 
@@ -49,7 +57,7 @@ docker compose pull
 docker compose up -d --wait
 ```
 
-Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in backups to keep starred items and trash. Files in the trash are kept for 30 days. Run one container per data folder.
+Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep accounts, starred items, and trash. Files in the trash are kept for 30 days. Run one container per data folder.
 
 ## Build from source
 

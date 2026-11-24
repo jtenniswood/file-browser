@@ -310,6 +310,7 @@ export async function openStorage(directory) {
 	const shortcutFile = join(state, 'shortcuts.json')
 	return {
 		root,
+		state,
 		list,
 		openFile,
 		upload,

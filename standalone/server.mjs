@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -8,6 +9,7 @@ import { basename, extname, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
+import { openAccounts } from './accounts.mjs'
 import { RequestError, openStorage, rootPath } from './storage.mjs'
 
 const assetTypes = {
@@ -61,14 +63,14 @@ function json(response, status, data) {
 	response.end(JSON.stringify(status === 200 ? { success: 200, data } : { success: status, data, message: data }))
 }
 
-async function bodyOf(request) {
-	if (Number(request.headers['content-length']) > jsonLimit)
+async function bodyOf(request, limit = jsonLimit) {
+	if (Number(request.headers['content-length']) > limit)
 		throw new RequestError(413, 'The request is too large.')
 	const chunks = []
 	let bytes = 0
 	for await (const chunk of request.iterator({ destroyOnReturn: false })) {
 		bytes += chunk.length
-		if (bytes > jsonLimit)
+		if (bytes > limit)
 			throw new RequestError(413, 'The request is too large.')
 		chunks.push(chunk)
 	}
@@ -209,6 +211,8 @@ export async function createFilesServer({
 	directory,
 	directAddress,
 	publicOrigin,
+	setupCode,
+	onSetupCode,
 	maxUploadBytes = 10 * 1024 ** 3,
 }) {
 	const directHost = directAddress && ipHostname(directAddress)
@@ -222,6 +226,9 @@ export async function createFilesServer({
 		throw new Error('Build the frontend with pnpm build:files before starting Files.')
 	const store = await openStorage(directory)
 	await store.trash()
+	const accounts = await openAccounts(store.state, setupCode)
+	if (setupCode && accounts.setupRequired())
+		onSetupCode?.(setupCode)
 
 	return createServer({ requestTimeout: 3600000 }, async (request, response) => {
 		response.setHeader('Cache-Control', 'no-store')
@@ -238,9 +245,23 @@ export async function createFilesServer({
 			if (!isAllowedRequest(request, pathname, directHost, publicUrl))
 				throw new RequestError(403, 'Open the configured Files address directly.')
 
+			const route = `${method} ${pathname}`
+			if (pathname.startsWith('/v1/auth/') || pathname.startsWith('/v1/users/2fa/')) {
+				let body
+				if (['POST', 'PUT', 'DELETE'].includes(method) && route !== 'POST /v1/auth/logout') {
+					if (!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type'] || ''))
+						throw new RequestError(415, 'Send account changes as JSON.')
+					body = await bodyOf(request, 4096)
+				}
+				const secure = publicUrl && request.headers.host?.toLowerCase() === publicUrl.host
+				return json(response, 200, await accounts.handle(route, body, request, response, secure))
+			}
+			if (/^\/v\d+\//.test(pathname) && !accounts.user(request))
+				throw new RequestError(401, 'Sign in to File Browser.')
+
 			const path = searchParams.get('path')
 			let data = null
-			switch (`${method} ${pathname}`) {
+			switch (route) {
 				case 'GET /v1/file/roots':
 					data = { roots: [rootPath], writable: [rootPath] }
 					break
@@ -342,11 +363,15 @@ async function start() {
 	const port = positiveInteger(env.FILES_PORT, 'FILES_PORT', 8080)
 	if (port > 65535)
 		throw new Error('FILES_PORT must be between 1 and 65535.')
+	const directAddress = env.FILES_BIND_ADDRESS || (ipHostname(host) ? host : undefined)
+	const setupCode = env.FILES_PUBLIC_ORIGIN || !localHost.test(ipHostname(directAddress)) ? randomBytes(16).toString('hex') : undefined
 	const server = await createFilesServer({
 		assetsDirectory: fileURLToPath(new URL('../build/file-browser', import.meta.url)),
 		directory: env.FILES_DIRECTORY || './files-data',
-		directAddress: env.FILES_BIND_ADDRESS || (ipHostname(host) ? host : undefined),
+		directAddress,
 		publicOrigin: env.FILES_PUBLIC_ORIGIN,
+		setupCode,
+		onSetupCode: code => process.stdout.write(`File Browser setup code: ${code}\n`),
 		maxUploadBytes: positiveInteger(env.FILES_MAX_UPLOAD_BYTES, 'FILES_MAX_UPLOAD_BYTES', 10 * 1024 ** 3),
 	})
 	server.listen(port, host, () => console.log(`Files is listening on http://${host}:${port}`))
