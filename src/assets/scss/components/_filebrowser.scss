@@ -55,6 +55,10 @@
             border-bottom: 1px solid var(--casa-divider-soft);
             box-shadow: none;
 
+            &.files-folder-header {
+                padding-bottom: 1.25rem;
+            }
+
             .input.is-rounded {
                 border-radius: 9999px !important;
             }
