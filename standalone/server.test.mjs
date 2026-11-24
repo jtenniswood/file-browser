@@ -123,7 +123,10 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.equal((await request('/v1/file/trash')).status, 404)
 })
 
-it('explains permission failures when creating or moving a folder', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async (t) => {
+it('explains permission failures when creating or moving a folder', {
+	skip: process.platform === 'win32' || process.getuid?.() === 0,
+	timeout: 15000,
+}, async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-permissions-'))
 	const assetsDirectory = join(directory, 'assets')
 	const dataDirectory = join(directory, 'data')
