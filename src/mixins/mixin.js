@@ -30,7 +30,7 @@ const typeMap = {
 	'text-x-cmake': ['makefile', 'cmake', 'dockerfile'],
 	'text-dockerfile': ['dockerfile'],
 }
-const hasThumbImageType = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg']
+const hasThumbImageType = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'avif', 'svg']
 
 const filePanelMap = {
 	'code-editor': union(typeMap['text-x-generic'], typeMap['text-markdown'], typeMap['text-css'], typeMap['text-html'], typeMap['text-x-cmake'], typeMap['text-dockerfile']),
