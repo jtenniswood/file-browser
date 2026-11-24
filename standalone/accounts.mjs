@@ -38,13 +38,13 @@ async function loadUsers(path) {
 		file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
 		const stat = await file.stat()
 		if (!stat.isFile() || stat.size > 1024 * 1024)
-			throw new Error('Invalid File Browser accounts file.')
+			throw new Error('Invalid Files accounts file.')
 		const { version, users } = JSON.parse(await file.readFile('utf8'))
 		if (version !== 1 || !Array.isArray(users) || !users.every(validAccount) || !users.some(user => user.role === 'admin'))
-			throw new Error('Invalid File Browser accounts file.')
+			throw new Error('Invalid Files accounts file.')
 		const records = new Map(users.map(user => [keyOf(user.username), user]))
 		if (records.size !== users.length)
-			throw new Error('Duplicate usernames in the File Browser accounts file.')
+			throw new Error('Duplicate usernames in the Files accounts file.')
 		return records
 	} catch (error) {
 		if (error.code === 'ENOENT')
@@ -94,7 +94,7 @@ export async function openAccounts(state, setupCode) {
 
 	function change(operation) {
 		if (queued >= 16)
-			throw new RequestError(429, 'File Browser is busy. Try again in a moment.')
+			throw new RequestError(429, 'Files is busy. Try again in a moment.')
 		queued++
 		const result = pending.then(operation).finally(() => queued--)
 		pending = result.catch(() => {})
@@ -196,14 +196,14 @@ export async function openAccounts(state, setupCode) {
 		if (users.has(key))
 			throw new RequestError(409, 'That username is already taken.')
 		if (users.size >= 250)
-			throw new RequestError(409, 'This File Browser instance already has 250 accounts.')
+			throw new RequestError(409, 'This Files instance already has 250 accounts.')
 		await save(key, { username: body.username, role, password: await passwordRecord(body.password), totp: null })
 		return key
 	}
 
 	async function signIn(body, request, response, secure) {
 		if (setupRequired())
-			throw new RequestError(409, 'Set up File Browser first.')
+			throw new RequestError(409, 'Set up Files first.')
 		const key = keyOf(body?.username)
 		const user = users.get(key)
 		const valid = await passwordMatches(user?.password || unknownPassword, body?.password)
@@ -255,11 +255,11 @@ export async function openAccounts(state, setupCode) {
 			if (!await passwordMatches(user.password, body?.password))
 				throw new RequestError(400, 'Your password is incorrect.')
 			if (sessionOf(request) !== session)
-				throw new RequestError(401, 'Sign in to File Browser.')
+				throw new RequestError(401, 'Sign in to Files.')
 			const secret = newSecret()
 			session.enrollment = { secret, expires: Date.now() + enrollmentMs }
-			const label = encodeURIComponent(`File Browser:${user.username}`)
-			return { secret, otpauth_url: `otpauth://totp/${label}?${new URLSearchParams({ secret, issuer: 'File Browser' })}` }
+			const label = encodeURIComponent(`Files:${user.username}`)
+			return { secret, otpauth_url: `otpauth://totp/${label}?${new URLSearchParams({ secret, issuer: 'Files' })}` }
 		}
 		if (route === 'POST /v1/users/2fa/enable') {
 			const enrollment = session.enrollment
@@ -307,7 +307,7 @@ export async function openAccounts(state, setupCode) {
 					if (route.endsWith('/login'))
 						return signIn(body, request, response, secure)
 					if (!setupRequired())
-						throw new RequestError(409, 'File Browser is already set up.')
+						throw new RequestError(409, 'Files is already set up.')
 					if (setupCode && (typeof body?.setupCode !== 'string' || !timingSafeEqual(Buffer.from(digest(body.setupCode.trim())), Buffer.from(digest(setupCode)))))
 						throw new RequestError(403, 'The setup code is incorrect.')
 					const key = await makeUser(body, 'admin')
@@ -317,14 +317,14 @@ export async function openAccounts(state, setupCode) {
 
 			const session = sessionOf(request)
 			if (!session)
-				throw new RequestError(401, 'Sign in to File Browser.')
+				throw new RequestError(401, 'Sign in to Files.')
 			if (route === 'GET /v1/auth/users')
 				return administer(route, body, session)
 			if (factorRoutes.has(route) || route === 'PUT /v1/auth/password')
 				limit(request, session.key)
 			return change(async () => {
 				if (sessionOf(request) !== session)
-					throw new RequestError(401, 'Sign in to File Browser.')
+					throw new RequestError(401, 'Sign in to Files.')
 				const user = users.get(session.key)
 				if (managementRoutes.has(route))
 					return administer(route, body, session)

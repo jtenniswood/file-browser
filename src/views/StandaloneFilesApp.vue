@@ -10,12 +10,12 @@
 		@complete="signIn" @refresh="loadSession" />
 	<main v-else class="files-account-page files-account-center">
 		<section class="files-account-card files-account-form" aria-live="polite">
-			<h1 class="title is-4">File Browser</h1>
+			<h1 class="title is-4">Files</h1>
 			<template v-if="error">
 				<p class="mb-4">{{ error }}</p>
 				<button class="button is-primary" type="button" @click="loadSession">Try again</button>
 			</template>
-			<p v-else>Opening File Browser…</p>
+			<p v-else>Opening Files…</p>
 		</section>
 	</main>
 </template>
