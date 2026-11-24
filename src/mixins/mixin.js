@@ -19,6 +19,7 @@ const typeMap = {
 	'application-vnd.ms-excel': ['xls', 'xlsx', 'csv'],
 	'application-vnd.ms-powerpoint': ['ppt', 'pptx'],
 	'application-pdf': ['pdf'],
+	'application-x-model': ['stl'],
 	'application-photoshop': ['psd', 'psb'],
 	'application-illustrator': ['ai', 'eps'],
 	'application-x-wine-extension-cpl': ['exe'],
@@ -39,6 +40,7 @@ const filePanelMap = {
 	'doc-viewer': union(typeMap['application-vnd.ms-word']),
 	'excel-viewer': union(typeMap['application-vnd.ms-excel']),
 	'pdf-viewer': typeMap['application-pdf'],
+	'stl-viewer': typeMap['application-x-model'],
 }
 export const wallpaperType = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'svg']
 const wallpaperConfig = 'wallpaper'

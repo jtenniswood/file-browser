@@ -342,6 +342,7 @@ export default {
 		DocViewer: defineAsyncComponent(() => import('./viewers/DocViewer.vue')),
 		ExcelViewer: defineAsyncComponent(() => import('./viewers/ExcelViewer.vue')),
 		PdfViewer: defineAsyncComponent(() => import('./viewers/PdfViewer.vue')),
+		StlViewer: defineAsyncComponent(() => import('./viewers/StlViewer.vue')),
 		EmptyHolder,
 		ErrorHolder,
 		OperationToolbar,
@@ -593,7 +594,12 @@ export default {
 				switch (e.code) {
 					case 'Escape':
 						if (this.isShowDetial) {
-							this.$refs.previewPanel.close()
+							if (this.$refs.previewPanel?.close) {
+								this.$refs.previewPanel.close()
+							} else {
+								this.isShowDetial = false
+								this.isModalOpen = false
+							}
 						}
 						break
 					case 'Backspace':
