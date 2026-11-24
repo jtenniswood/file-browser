@@ -76,7 +76,7 @@
 							<button v-if="$standaloneFiles" class="is-flex list-item new-list-item files-sign-out"
 								type="button" :disabled="isSigningOut" @click="signOut">
 								<span class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
-									<b-icon aria-hidden="true" icon="exit-app-outline" pack="casa" />
+									<b-icon aria-hidden="true" icon="logout" pack="mdi" />
 								</span>
 								<span>Sign out</span>
 							</button>
