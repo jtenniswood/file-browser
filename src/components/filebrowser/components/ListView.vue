@@ -168,7 +168,7 @@ export default {
 </script>
 
 <style scoped>
-.tr > :nth-child(n + 3) {
+.tr-wrapper .tr > :is(.th, .td):nth-child(n + 3) {
 	margin-inline-start: 1rem;
 	min-width: 0;
 }
