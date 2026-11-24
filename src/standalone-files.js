@@ -1,6 +1,5 @@
 import 'intersection-observer'
-import { createApp, h } from 'vue'
-import { RouterView } from 'vue-router'
+import { createApp } from 'vue'
 import Buefy from 'buefy'
 import VueFullscreen from 'vue-fullscreen'
 import VueDOMPurifyHTML from 'vue-dompurify-html'
@@ -13,12 +12,13 @@ import casaIcons from '@/plugins/casa-icons'
 import dropdownAppendToBody from '@/plugins/dropdown-append-to-body'
 import { dompurifyOptions } from '@/plugins/dompurify'
 import { applyThemePreference, readThemePreference } from '@/mixins/app/themePreference'
+import StandaloneFilesApp from '@/views/StandaloneFilesApp.vue'
 import '@/plugins/vee-validate'
 import '@/assets/scss/app.scss'
 
 applyThemePreference(readThemePreference(undefined, 'light'))
 
-const app = createApp({ render: () => h(RouterView) })
+const app = createApp(StandaloneFilesApp)
 app.use(Buefy, casaIcons)
 app.use(dropdownAppendToBody)
 app.use(VueFullscreen)

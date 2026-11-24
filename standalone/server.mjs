@@ -1,13 +1,15 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { isIP } from 'node:net'
 import { basename, extname, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
+import { openAccounts } from './accounts.mjs'
 import { RequestError, openStorage, rootPath } from './storage.mjs'
 
 const assetTypes = {
@@ -54,21 +56,21 @@ const previewTypes = {
 const octet = 'application/octet-stream'
 const jsonLimit = 16 * 1024 * 1024
 const editLimit = 8 * 1024 * 1024
-const digest = value => createHash('sha256').update(value).digest()
+const localHost = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i
 
 function json(response, status, data) {
 	response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
 	response.end(JSON.stringify(status === 200 ? { success: 200, data } : { success: status, data, message: data }))
 }
 
-async function bodyOf(request) {
-	if (Number(request.headers['content-length']) > jsonLimit)
+async function bodyOf(request, limit = jsonLimit) {
+	if (Number(request.headers['content-length']) > limit)
 		throw new RequestError(413, 'The request is too large.')
 	const chunks = []
 	let bytes = 0
 	for await (const chunk of request.iterator({ destroyOnReturn: false })) {
 		bytes += chunk.length
-		if (bytes > jsonLimit)
+		if (bytes > limit)
 			throw new RequestError(413, 'The request is too large.')
 		chunks.push(chunk)
 	}
@@ -79,26 +81,28 @@ async function bodyOf(request) {
 	}
 }
 
-function sameOrigin(request) {
-	const { origin, host, 'sec-fetch-site': site } = request.headers
-	if (site && site !== 'same-origin')
-		return false
-	if (!origin)
-		return true
-	try {
-		return new URL(origin).host === host
-	} catch {
-		return false
-	}
+function ipHostname(address) {
+	const family = isIP(address)
+	if (!family || address.includes('%'))
+		return ''
+	const { hostname } = new URL(`http://${family === 6 ? `[${address}]` : address}`)
+	return hostname === '0.0.0.0' || hostname === '[::]' ? '' : hostname
 }
 
-function isLocalRequest(request) {
-	const { host, origin, 'sec-fetch-site': site } = request.headers
-	if (!/^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i.test(host || ''))
+function isAllowedRequest(request, pathname, directHost, publicOrigin) {
+	const { host, origin, 'sec-fetch-site': site, 'sec-fetch-dest': destination } = request.headers
+	const authority = host?.toLowerCase() || ''
+	const usesPublicOrigin = authority === publicOrigin?.host
+	const usesDirectHost = directHost && authority.replace(/:\d{1,5}$/, '') === directHost
+	if (!usesPublicOrigin && !usesDirectHost && !localHost.test(authority))
 		return false
+	// A link or an authentication proxy can navigate to the app's entry page.
+	if (destination === 'document' && request.method === 'GET' && pathname === '/')
+		return !origin
 	if (site === 'none' && ['GET', 'HEAD'].includes(request.method))
 		return !origin
-	return sameOrigin(request)
+	const expectedOrigin = usesPublicOrigin ? publicOrigin.origin : `http://${authority}`
+	return (!site || site === 'same-origin') && (!origin || origin === expectedOrigin)
 }
 
 function attachment(name) {
@@ -205,19 +209,26 @@ function positiveInteger(value, label, fallback) {
 export async function createFilesServer({
 	assetsDirectory,
 	directory,
-	username = 'files',
-	password,
-	localNoAuth = false,
+	directAddress,
+	publicOrigin,
+	setupCode,
+	onSetupCode,
 	maxUploadBytes = 10 * 1024 ** 3,
 }) {
-	if (!localNoAuth && (!username || /[:\p{Cc}]/u.test(username) || !password || password.length < 12 || /\p{Cc}/u.test(password)))
-		throw new Error('Set a valid FILES_USERNAME and a FILES_PASSWORD of at least 12 characters.')
+	const directHost = directAddress && ipHostname(directAddress)
+	if (directAddress && !directHost)
+		throw new Error('Set FILES_BIND_ADDRESS to a specific IP address.')
+	const publicUrl = publicOrigin && new URL(publicOrigin)
+	if (publicUrl && (publicUrl.protocol !== 'https:' || publicUrl.href !== `${publicUrl.origin}/`))
+		throw new Error('Set FILES_PUBLIC_ORIGIN to an HTTPS origin such as https://files.example.com.')
 	const assets = await realpath(assetsDirectory).catch(() => null)
 	if (!assets || !(await stat(resolve(assets, 'index.html')).catch(() => null))?.isFile())
 		throw new Error('Build the frontend with pnpm build:files before starting Files.')
 	const store = await openStorage(directory)
 	await store.trash()
-	const expected = localNoAuth ? null : digest(`${username}:${password}`)
+	const accounts = await openAccounts(store.state, setupCode)
+	if (setupCode && accounts.setupRequired())
+		onSetupCode?.(setupCode)
 
 	return createServer({ requestTimeout: 3600000 }, async (request, response) => {
 		response.setHeader('Cache-Control', 'no-store')
@@ -231,22 +242,26 @@ export async function createFilesServer({
 			if (method === 'GET' && pathname === '/healthz')
 				return json(response, 200, 'ok')
 
-			if (localNoAuth) {
-				if (!isLocalRequest(request))
-					throw new RequestError(403, 'Open the localhost Files address directly.')
-			} else {
-				const token = /^Basic ([\w+/=]+)$/i.exec(request.headers.authorization || '')?.[1]
-				if (!token || !timingSafeEqual(digest(Buffer.from(token, 'base64')), expected)) {
-					response.setHeader('WWW-Authenticate', 'Basic realm="Files", charset="UTF-8"')
-					return json(response, 401, 'Sign in to Files.')
+			if (!isAllowedRequest(request, pathname, directHost, publicUrl))
+				throw new RequestError(403, 'Open the configured Files address directly.')
+
+			const route = `${method} ${pathname}`
+			if (pathname.startsWith('/v1/auth/') || pathname.startsWith('/v1/users/2fa/')) {
+				let body
+				if (['POST', 'PUT', 'DELETE'].includes(method) && route !== 'POST /v1/auth/logout') {
+					if (!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type'] || ''))
+						throw new RequestError(415, 'Send account changes as JSON.')
+					body = await bodyOf(request, 4096)
 				}
-				if (!['GET', 'HEAD'].includes(method) && !sameOrigin(request))
-					throw new RequestError(403, 'Open Files before changing its contents.')
+				const secure = publicUrl && request.headers.host?.toLowerCase() === publicUrl.host
+				return json(response, 200, await accounts.handle(route, body, request, response, secure))
 			}
+			if (/^\/v\d+\//.test(pathname) && !accounts.user(request))
+				throw new RequestError(401, 'Sign in to File Browser.')
 
 			const path = searchParams.get('path')
 			let data = null
-			switch (`${method} ${pathname}`) {
+			switch (route) {
 				case 'GET /v1/file/roots':
 					data = { roots: [rootPath], writable: [rootPath] }
 					break
@@ -344,19 +359,19 @@ export async function createFilesServer({
 
 async function start() {
 	const env = process.env
-	const host = env.FILES_HOST || '127.0.0.1'
-	const localNoAuth = env.FILES_LOCAL_NO_AUTH === '1'
+	const host = env.FILES_HOST || env.FILES_BIND_ADDRESS || '127.0.0.1'
 	const port = positiveInteger(env.FILES_PORT, 'FILES_PORT', 8080)
 	if (port > 65535)
 		throw new Error('FILES_PORT must be between 1 and 65535.')
+	const directAddress = env.FILES_BIND_ADDRESS || (ipHostname(host) ? host : undefined)
+	const setupCode = env.FILES_PUBLIC_ORIGIN || !localHost.test(ipHostname(directAddress)) ? randomBytes(16).toString('hex') : undefined
 	const server = await createFilesServer({
 		assetsDirectory: fileURLToPath(new URL('../build/file-browser', import.meta.url)),
 		directory: env.FILES_DIRECTORY || './files-data',
-		username: env.FILES_USERNAME,
-		localNoAuth,
-		password: !localNoAuth && env.FILES_PASSWORD_FILE
-			? (await readFile(env.FILES_PASSWORD_FILE, 'utf8')).replace(/\r?\n$/, '')
-			: env.FILES_PASSWORD,
+		directAddress,
+		publicOrigin: env.FILES_PUBLIC_ORIGIN,
+		setupCode,
+		onSetupCode: code => process.stdout.write(`File Browser setup code: ${code}\n`),
 		maxUploadBytes: positiveInteger(env.FILES_MAX_UPLOAD_BYTES, 'FILES_MAX_UPLOAD_BYTES', 10 * 1024 ** 3),
 	})
 	server.listen(port, host, () => console.log(`Files is listening on http://${host}:${port}`))

@@ -20,21 +20,32 @@ jobs:
           persist-credentials: false
       - name: Build the container
         run: docker build --tag file-browser:test .
-      - name: Check sign-in and file access
+      - name: Check direct sign-in and file access with Docker Compose
         shell: bash
         run: |
+          export FILES_IMAGE=file-browser:test FILES_BIND_ADDRESS=127.0.0.2 FILES_PUBLISH_PORT=18080
+          export FILES_UID="$(id -u)" FILES_GID="$(id -g)"
+          FILES_DIRECTORY=$(mktemp -d)
+          export FILES_DIRECTORY
+          work=$(mktemp -d)
+          trap 'docker compose down; rm -rf "$FILES_DIRECTORY" "$work"' EXIT
+          docker compose up -d --pull never --wait --wait-timeout 45
+          url="http://$FILES_BIND_ADDRESS:$FILES_PUBLISH_PORT"
+          curl -fsS "$url/" -o /dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: untrusted.test' "$url/")" = 403
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$url/v1/folder?path=/DATA")" = 401
+          setup_code=$(docker compose logs --no-color files | sed -n 's/.*File Browser setup code: \([0-9a-f]*\)$/\1/p' | tail -1)
+          test -n "$setup_code"
           password=$(openssl rand -hex 24)
-          docker run -d --name file-browser-test \
-            --publish 127.0.0.1:18080:8080 \
-            --env FILES_PASSWORD="$password" file-browser:test
-          trap 'docker logs file-browser-test; docker rm -f file-browser-test' EXIT
-          url=http://127.0.0.1:18080
-          curl -fsS --retry 15 --retry-all-errors --retry-delay 1 "$url/healthz"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' "$url/")" = 401
-          curl -fsS --user "files:$password" "$url/" -o /dev/null
-          curl -fsS --user "files:$password" --header 'Content-Type: application/json' \
+          jq -n --arg password "$password" --arg setupCode "$setup_code" '{username:"owner", $password, $setupCode}' \
+            | curl -fsS --header "Origin: $url" --header 'Content-Type: application/json' --data @- "$url/v1/auth/setup" \
+            | jq -e '.data.user.role == "admin"'
+          jq -n --arg password "$password" '{username:"owner", $password}' \
+            | curl -fsS --header "Origin: $url" --header 'Content-Type: application/json' --data @- --cookie-jar "$work/cookies" "$url/v1/auth/login" \
+            | jq -e '.data.user.username == "owner"'
+          curl -fsS --cookie "$work/cookies" --header "Origin: $url" --header 'Content-Type: application/json' \
             --data '{"path":"/DATA/smoke"}' "$url/v1/folder"
-          curl -fsS --user "files:$password" "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
+          curl -fsS --cookie "$work/cookies" "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
 
   publish:
     name: Publish to GitHub Container Registry

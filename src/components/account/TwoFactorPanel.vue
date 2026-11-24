@@ -126,7 +126,7 @@ export default {
 				this.step = 'codes'
 			} catch (err) {
 				// 10017: the pending secret is gone (a password login in between), start again.
-				if (this.fail(err) === 10017) {
+				if ([10017, 410].includes(this.fail(err))) {
 					this.step = 'password'
 					this.focusInput()
 				}
@@ -145,7 +145,7 @@ export default {
 				this.$emit('done')
 			} catch (err) {
 				// 10017: it was not on any more.
-				if (this.fail(err) === 10017) {
+				if ([10017, 410].includes(this.fail(err))) {
 					this.$emit('change', false)
 					this.$emit('done')
 				}
