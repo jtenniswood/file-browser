@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -145,8 +145,7 @@ it('explains permission failures when creating or moving a folder', {
 
 	const create = await submit(origin, '/v1/folder', { path: '/DATA/Syncthing/test' }, cookie)
 	assert.equal(create.status, 403)
-	assert.equal((await create.json()).message,
-		'Files could not create a folder in “/DATA/Syncthing”. Check that the Files service account has write access to this folder on the server.')
+	assert.equal((await create.json()).message, 'Files could not create a folder in “/DATA/Syncthing”. Check that the Files service account has write access to this folder on the server.')
 
 	const move = await submit(origin, '/v1/batch/task', {
 		type: 'move',
@@ -154,8 +153,7 @@ it('explains permission failures when creating or moving a folder', {
 		to: '/DATA/Syncthing',
 	}, cookie)
 	assert.equal(move.status, 403)
-	assert.equal((await move.json()).message,
-		'Files could not move the selection to “/DATA/Syncthing”. Check that the Files service account has write access to the source and destination folders on the server.')
+	assert.equal((await move.json()).message, 'Files could not move the selection to “/DATA/Syncthing”. Check that the Files service account has write access to the source and destination folders on the server.')
 	assert.deepEqual(await readdir(destination), [])
 	assert.deepEqual(await readdir(join(dataDirectory, 'New folder')), [])
 })
