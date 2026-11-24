@@ -14,7 +14,7 @@ test -f .env || printf 'FILES_UID=%s\nFILES_GID=%s\n' "$(id -u)" "$(id -g)" > .e
 docker compose up -d --wait
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host and follow the prompts to create the first administrator. Files shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host and follow the prompts to set the password for the default account. Files shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
 
 The Compose file pulls `ghcr.io/jtenniswood/files:latest` from GitHub Container Registry. [View available image tags](https://github.com/jtenniswood/files/pkgs/container/files).
 
@@ -43,13 +43,13 @@ Set `FILES_BIND_ADDRESS` in `.env` to the Docker host’s local network IP addre
 
 If you choose to use an HTTPS reverse proxy, set `FILES_PUBLIC_ORIGIN` to its HTTPS address and preserve the original `Host` header. Set the proxy’s upload size limit and timeouts for the files you expect.
 
-If you enable network access before setting up the first administrator, the setup screen asks for a one-time code. Run `docker compose logs files` on the host and look for **Files setup code**. The code is generated again if you restart before finishing setup.
+If you enable network access before setting the account password, the setup screen asks for a one-time code. Run `docker compose logs files` on the host and look for **Files setup code**. The code is generated again if you restart before finishing setup.
 
-## Manage accounts
+## Secure access to Files
 
-Open **Settings** from the Files sidebar. Administrators can create members or other administrators, reset another user's password or two-factor sign-in, and remove users. All users have read and write access to the same **DATA** folder.
+Sign in with the account password. Open **Settings → Security** to change it or enable two-factor sign-in with a compatible authenticator app. Save the recovery codes so you can sign in if you lose access to your authenticator. Each code works once.
 
-Users can change their own password and set up two-factor sign-in with any compatible authenticator app. Save the recovery codes when they appear so you can sign in if you lose the app. Each code works once.
+If you’re upgrading from a version with multiple accounts, Files keeps the first administrator’s password and two-factor settings. Access through additional accounts ends on upgrade. Files and starred items remain in place.
 
 ## Update, stop, or back up
 
@@ -60,7 +60,7 @@ docker compose pull
 docker compose up -d --wait
 ```
 
-Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep accounts and starred items. Run one container per data folder.
+Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep account settings and starred items. Run one container per data folder.
 
 After an upgrade, any files still in the former Trash remain in the hidden `.files-state` directory on the host. In each entry folder, `entry.json` records the original path and `data` holds the file or folder. You can copy the contents back from the host.
 

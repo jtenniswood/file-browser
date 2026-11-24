@@ -15,14 +15,15 @@ const sessionSeconds = 12 * 60 * 60
 const enrollmentMs = 10 * 60 * 1000
 const attemptWindowMs = 10 * 60 * 1000
 const cookieName = 'files_session'
-const wrongCredentials = 'The username, password, or sign-in code is incorrect.'
+const defaultUsername = 'admin'
+const wrongCredentials = 'The password or sign-in code is incorrect.'
 
 const randomHex = size => randomBytes(size).toString('hex')
 const digest = value => createHash('sha256').update(value).digest('hex')
 const keyOf = value => typeof value === 'string' && usernamePattern.test(value) ? value.toLowerCase() : ''
 const isHex = (value, length) => typeof value === 'string' && value.length === length && digit.test(value)
 const canHash = password => typeof password === 'string' && Buffer.byteLength(password) <= 256
-const accountInfo = user => ({ username: user.username, role: user.role, totp_enabled: Boolean(user.totp) })
+const accountInfo = user => ({ username: user.username, totp_enabled: Boolean(user.totp) })
 
 function validAccount(user) {
 	return user && keyOf(user.username) && ['admin', 'member'].includes(user.role)
@@ -32,7 +33,7 @@ function validAccount(user) {
 			&& Array.isArray(user.totp.recovery) && user.totp.recovery.every(code => isHex(code, 64))))
 }
 
-async function loadUsers(path) {
+async function loadAccount(path) {
 	let file
 	try {
 		file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
@@ -40,15 +41,18 @@ async function loadUsers(path) {
 		if (!stat.isFile() || stat.size > 1024 * 1024)
 			throw new Error('Invalid Files accounts file.')
 		const { version, users } = JSON.parse(await file.readFile('utf8'))
-		if (version !== 1 || !Array.isArray(users) || !users.every(validAccount) || !users.some(user => user.role === 'admin'))
+		if (version !== 1 || !Array.isArray(users) || !users.every(validAccount))
 			throw new Error('Invalid Files accounts file.')
-		const records = new Map(users.map(user => [keyOf(user.username), user]))
-		if (records.size !== users.length)
+		if (new Set(users.map(user => keyOf(user.username))).size !== users.length)
 			throw new Error('Duplicate usernames in the Files accounts file.')
-		return records
+		// Older installations stored accounts in creation order.
+		const administrator = users.find(user => user.role === 'admin')
+		if (!administrator)
+			throw new Error('Invalid Files accounts file.')
+		return administrator
 	} catch (error) {
 		if (error.code === 'ENOENT')
-			return new Map()
+			return null
 		throw error
 	} finally {
 		await file?.close()
@@ -85,10 +89,9 @@ function recoveryDigest(code) {
 
 export async function openAccounts(state, setupCode) {
 	const path = join(state, 'accounts.json')
-	let users = await loadUsers(path)
+	let account = await loadAccount(path)
 	const sessions = new Map()
 	const attempts = new Map()
-	const unknownPassword = { salt: randomHex(16), hash: '0'.repeat(128) }
 	let pending = Promise.resolve()
 	let queued = 0
 
@@ -101,30 +104,25 @@ export async function openAccounts(state, setupCode) {
 		return result
 	}
 
-	async function save(key, user) {
-		const next = new Map(users)
-		if (user)
-			next.set(key, user)
-		else
-			next.delete(key)
+	async function save(user) {
 		const temporary = `${path}.${randomHex(12)}.tmp`
 		try {
 			const file = await open(temporary, 'wx', 0o600)
 			try {
-				await file.writeFile(JSON.stringify({ version: 1, users: [...next.values()] }))
+				await file.writeFile(JSON.stringify({ version: 1, users: [user] }))
 				await file.sync()
 			} finally {
 				await file.close()
 			}
 			await rename(temporary, path)
-			users = next
+			account = user
 		} finally {
 			await rm(temporary, { force: true })
 		}
 	}
 
 	function setupRequired() {
-		return users.size === 0
+		return account === null
 	}
 
 	function sessionOf(request) {
@@ -137,7 +135,7 @@ export async function openAccounts(state, setupCode) {
 		return session
 	}
 
-	function startSession(request, response, key, secure) {
+	function startSession(request, response, secure) {
 		sessions.delete(tokenOf(request))
 		if (sessions.size >= 1024) {
 			for (const [token, session] of sessions) {
@@ -148,25 +146,18 @@ export async function openAccounts(state, setupCode) {
 				sessions.delete(sessions.keys().next().value)
 		}
 		const token = randomHex(32)
-		sessions.set(token, { key, expires: Date.now() + sessionSeconds * 1000 })
+		sessions.set(token, { expires: Date.now() + sessionSeconds * 1000 })
 		response.setHeader('Set-Cookie', cookie(token, sessionSeconds, secure))
-		return { user: accountInfo(users.get(key)) }
-	}
-
-	function revoke(key) {
-		for (const [token, session] of sessions) {
-			if (session.key === key)
-				sessions.delete(token)
-		}
+		return { user: accountInfo(account) }
 	}
 
 	function rotateSession(request, response, session, secure) {
 		const stillSignedIn = sessionOf(request) === session
-		revoke(session.key)
-		return stillSignedIn ? startSession(request, response, session.key, secure) : { user: null }
+		sessions.clear()
+		return stillSignedIn ? startSession(request, response, secure) : { user: null }
 	}
 
-	function limit(request, key) {
+	function limit(request, bucketKey = 'account') {
 		const now = Date.now()
 		if (attempts.size >= 2048) {
 			for (const [id, bucket] of attempts) {
@@ -175,7 +166,7 @@ export async function openAccounts(state, setupCode) {
 			}
 		}
 		const client = `ip:${request.socket.remoteAddress || ''}`
-		for (const [id, maximum] of [[client, 40], [`account:${key}`, 12]]) {
+		for (const [id, maximum] of [[client, 40], [bucketKey, 12]]) {
 			let bucket = attempts.get(id)
 			if (!bucket || bucket.until <= now) {
 				if (!bucket && attempts.size >= 2048)
@@ -189,25 +180,12 @@ export async function openAccounts(state, setupCode) {
 		}
 	}
 
-	async function makeUser(body, role) {
-		const key = keyOf(body?.username)
-		if (!key)
-			throw new RequestError(400, 'Use 3–40 letters, numbers, dots, dashes, or underscores for the username. Start with a letter or number.')
-		if (users.has(key))
-			throw new RequestError(409, 'That username is already taken.')
-		if (users.size >= 250)
-			throw new RequestError(409, 'This Files instance already has 250 accounts.')
-		await save(key, { username: body.username, role, password: await passwordRecord(body.password), totp: null })
-		return key
-	}
-
 	async function signIn(body, request, response, secure) {
 		if (setupRequired())
 			throw new RequestError(409, 'Set up Files first.')
-		const key = keyOf(body?.username)
-		const user = users.get(key)
-		const valid = await passwordMatches(user?.password || unknownPassword, body?.password)
-		if (!user || !valid)
+		const user = account
+		const valid = await passwordMatches(user.password, body?.password)
+		if (!valid || (body?.username !== undefined && keyOf(body.username) !== keyOf(user.username)))
 			throw new RequestError(401, wrongCredentials)
 		if (user.totp) {
 			if (!body.code)
@@ -217,35 +195,9 @@ export async function openAccounts(state, setupCode) {
 			if (step === null && !user.totp.recovery.includes(recovery))
 				throw new RequestError(401, wrongCredentials)
 			const totp = { ...user.totp, lastStep: step ?? user.totp.lastStep, recovery: user.totp.recovery.filter(code => code !== recovery) }
-			await save(key, { ...user, totp })
+			await save({ ...user, totp })
 		}
-		return startSession(request, response, key, secure)
-	}
-
-	async function administer(route, body, session) {
-		const current = users.get(session.key)
-		if (current.role !== 'admin')
-			throw new RequestError(403, 'Only administrators can manage users.')
-		if (route === 'GET /v1/auth/users')
-			return [...users.values()].map(accountInfo)
-		if (route === 'POST /v1/auth/users') {
-			const key = await makeUser(body, body?.role === 'admin' ? 'admin' : 'member')
-			return accountInfo(users.get(key))
-		}
-		const key = keyOf(body?.username)
-		const user = users.get(key)
-		if (!user)
-			throw new RequestError(404, 'That account no longer exists.')
-		if (key === session.key)
-			throw new RequestError(400, 'Manage your own account under Your account.')
-		if (route === 'DELETE /v1/auth/users')
-			await save(key, null)
-		else if (route === 'PUT /v1/auth/users/password')
-			await save(key, { ...user, password: await passwordRecord(body.password) })
-		else
-			await save(key, { ...user, totp: null })
-		revoke(key)
-		return null
+		return startSession(request, response, secure)
 	}
 
 	async function manageFactor(route, body, request, response, session, user, secure) {
@@ -270,7 +222,7 @@ export async function openAccounts(state, setupCode) {
 				throw new RequestError(400, 'That code did not match. Try the current code from your app.')
 			const codes = Array.from({ length: 8 }, () => randomHex(10).match(/.{5}/g).join('-'))
 			const totp = { secret: enrollment.secret, lastStep: step, recovery: codes.map(recoveryDigest) }
-			await save(session.key, { ...user, totp })
+			await save({ ...user, totp })
 			rotateSession(request, response, session, secure)
 			return { recovery_codes: codes }
 		}
@@ -279,22 +231,21 @@ export async function openAccounts(state, setupCode) {
 		const valid = body?.password ? await passwordMatches(user.password, body.password) : acceptedStep(user.totp.secret, body?.code, user.totp.lastStep) !== null
 		if (!valid)
 			throw new RequestError(400, 'Your password or code is incorrect.')
-		await save(session.key, { ...user, totp: null })
+		await save({ ...user, totp: null })
 		return rotateSession(request, response, session, secure)
 	}
 
-	const managementRoutes = new Set(['GET /v1/auth/users', 'POST /v1/auth/users', 'DELETE /v1/auth/users', 'PUT /v1/auth/users/password', 'DELETE /v1/auth/users/2fa'])
 	const factorRoutes = new Set(['POST /v1/users/2fa/setup', 'POST /v1/users/2fa/enable', 'POST /v1/users/2fa/disable'])
 
 	return {
 		setupRequired,
-		user(request) {
-			return users.get(sessionOf(request)?.key)
+		signedIn(request) {
+			return Boolean(sessionOf(request))
 		},
 		async handle(route, body, request, response, secure) {
 			if (route === 'GET /v1/auth/session') {
-				const user = users.get(sessionOf(request)?.key)
-				return { needsSetup: setupRequired(), setupCodeRequired: setupRequired() && Boolean(setupCode), user: user ? accountInfo(user) : null }
+				const user = sessionOf(request) ? accountInfo(account) : null
+				return { needsSetup: setupRequired(), setupCodeRequired: setupRequired() && Boolean(setupCode), user }
 			}
 			if (route === 'POST /v1/auth/logout') {
 				sessions.delete(tokenOf(request))
@@ -302,7 +253,7 @@ export async function openAccounts(state, setupCode) {
 				return null
 			}
 			if (route === 'POST /v1/auth/setup' || route === 'POST /v1/auth/login') {
-				limit(request, route.endsWith('/setup') ? '' : keyOf(body?.username))
+				limit(request, route.endsWith('/setup') ? 'setup' : 'account')
 				return change(async () => {
 					if (route.endsWith('/login'))
 						return signIn(body, request, response, secure)
@@ -310,33 +261,27 @@ export async function openAccounts(state, setupCode) {
 						throw new RequestError(409, 'Files is already set up.')
 					if (setupCode && (typeof body?.setupCode !== 'string' || !timingSafeEqual(Buffer.from(digest(body.setupCode.trim())), Buffer.from(digest(setupCode)))))
 						throw new RequestError(403, 'The setup code is incorrect.')
-					const key = await makeUser(body, 'admin')
-					return startSession(request, response, key, secure)
+					await save({ username: defaultUsername, role: 'admin', password: await passwordRecord(body?.password), totp: null })
+					return startSession(request, response, secure)
 				})
 			}
 
 			const session = sessionOf(request)
 			if (!session)
 				throw new RequestError(401, 'Sign in to Files.')
-			if (route === 'GET /v1/auth/users')
-				return administer(route, body, session)
-			if (factorRoutes.has(route) || route === 'PUT /v1/auth/password')
-				limit(request, session.key)
+			if (!factorRoutes.has(route) && route !== 'PUT /v1/auth/password')
+				throw new RequestError(404, 'The requested account endpoint is unavailable.')
+			limit(request)
 			return change(async () => {
 				if (sessionOf(request) !== session)
 					throw new RequestError(401, 'Sign in to Files.')
-				const user = users.get(session.key)
-				if (managementRoutes.has(route))
-					return administer(route, body, session)
+				const user = account
 				if (factorRoutes.has(route))
 					return manageFactor(route, body, request, response, session, user, secure)
-				if (route === 'PUT /v1/auth/password') {
-					if (!await passwordMatches(user.password, body?.currentPassword))
-						throw new RequestError(400, 'Your current password is incorrect.')
-					await save(session.key, { ...user, password: await passwordRecord(body.password) })
-					return rotateSession(request, response, session, secure)
-				}
-				throw new RequestError(404, 'The requested account endpoint is unavailable.')
+				if (!await passwordMatches(user.password, body?.currentPassword))
+					throw new RequestError(400, 'Your current password is incorrect.')
+				await save({ ...user, password: await passwordRecord(body.password) })
+				return rotateSession(request, response, session, secure)
 			})
 		},
 	}
