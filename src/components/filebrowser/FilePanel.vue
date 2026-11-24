@@ -151,7 +151,7 @@
 											<span aria-hidden="true" class="file-view-icon">{{ hiddenFilesIcon }}</span>
 										</p>
 									</b-tooltip>
-									<b-dropdown position="is-bottom-left" aria-role="menu" class="mr-3" @update:model-value="pickSort">
+									<b-dropdown position="is-bottom-left" aria-role="menu" class="file-dropdown mr-3">
 										<template #trigger>
 											<b-tooltip :label="$t('Sort by')" position="is-left" type="is-dark">
 												<p :aria-label="$t('Sort by')" class="is-clickable none-line-height" role="button" tabindex="0">
@@ -159,8 +159,9 @@
 												</p>
 											</b-tooltip>
 										</template>
-										<b-dropdown-item v-for="option in sortOptions" :key="option.sort" :value="option.sort"
-											:class="{ 'is-active': $store.state.sort === option.sort }" aria-role="menuitem">
+											<b-dropdown-item v-for="option in sortOptions" :key="option.sort"
+												:aria-current="$store.state.sort === option.sort ? 'true' : null" aria-role="menuitem"
+												@click="pickSort(option.sort)">
 											{{ $t(option.text) }}
 											<span v-if="$store.state.sort === option.sort" class="ml-1">{{ $store.state.order === 'asc' ? '↑' : '↓' }}</span>
 										</b-dropdown-item>
