@@ -14,18 +14,53 @@ export default {
 	components: {
 		FilePanel,
 	},
+	data() {
+		return { previousTitle: null }
+	},
+	computed: {
+		pageTitle() {
+			const path = this.$store.state.currentPath
+			const directory = path === '/' ? 'Root' : path.replace(/\/+$/, '').split('/').pop()
+			const files = this.$t('Files')
+			return directory ? `${files} · ${directory}` : files
+		},
+	},
+	watch: {
+		pageTitle(title) {
+			if (this.previousTitle !== null) {
+				document.title = title
+			}
+		},
+	},
 	mounted() {
-		this.previousTitle = document.title
-		document.title = `${this.$t('Files')} · ${this.previousTitle}`
+		this.showPageTitle()
 		// what the modal's after-enter says: the list views measure themselves
 		this.$nextTick(() => this.$EventBus.$emit(events.AFTER_FILES_ENTER))
 		window.addEventListener('beforeunload', this.holdUploads)
 	},
+	activated() {
+		this.showPageTitle()
+	},
+	deactivated() {
+		this.restorePageTitle()
+	},
 	beforeUnmount() {
 		window.removeEventListener('beforeunload', this.holdUploads)
-		document.title = this.previousTitle
+		this.restorePageTitle()
 	},
 	methods: {
+		showPageTitle() {
+			if (this.previousTitle === null) {
+				this.previousTitle = document.title
+			}
+			document.title = this.pageTitle
+		},
+		restorePageTitle() {
+			if (this.previousTitle !== null) {
+				document.title = this.previousTitle
+				this.previousTitle = null
+			}
+		},
 		// A tab the dashboard opened can close itself; one opened by hand
 		// cannot, and goes to the dashboard instead. A tab the user kept open
 		// at the upload prompt stays where it is.
