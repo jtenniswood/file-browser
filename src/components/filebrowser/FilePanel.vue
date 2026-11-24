@@ -76,7 +76,10 @@
 							<button v-if="$standaloneFiles" class="is-flex list-item new-list-item files-sign-out"
 								type="button" :disabled="isSigningOut" @click="signOut">
 								<span class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
-									<b-icon aria-hidden="true" icon="logout" pack="mdi" />
+									<svg aria-hidden="true" fill="none" height="24" stroke="currentColor" stroke-linecap="round"
+										stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24">
+										<path d="M11 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6M10 12h11m-4-4 4 4-4 4" />
+									</svg>
 								</span>
 								<span>Sign out</span>
 							</button>
