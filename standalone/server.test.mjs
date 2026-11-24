@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -121,6 +121,39 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.deepEqual(await readdir(state), stateBeforeDeletion)
 	assert.equal(await readFile(join(previousEntry, 'data'), 'utf8'), 'previously deleted file')
 	assert.equal((await request('/v1/file/trash')).status, 404)
+})
+
+it('explains permission failures when creating or moving a folder', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-permissions-'))
+	const assetsDirectory = join(directory, 'assets')
+	const dataDirectory = join(directory, 'data')
+	const destination = join(dataDirectory, 'Syncthing')
+	await mkdir(assetsDirectory)
+	await mkdir(join(dataDirectory, 'New folder'), { recursive: true })
+	await mkdir(destination, { mode: 0o555 })
+	t.onTestFinished(async () => {
+		await chmod(destination, 0o755)
+		await rm(directory, { recursive: true, force: true })
+	})
+	const { origin } = await startServer({ assetsDirectory, directory: dataDirectory }, t)
+	const cookie = cookieOf(await submit(origin, '/v1/auth/setup', account))
+	assert.ok(cookie)
+
+	const create = await submit(origin, '/v1/folder', { path: '/DATA/Syncthing/test' }, cookie)
+	assert.equal(create.status, 403)
+	assert.equal((await create.json()).message,
+		'Files could not create a folder in “/DATA/Syncthing”. Check that the Files service account has write access to this folder on the server.')
+
+	const move = await submit(origin, '/v1/batch/task', {
+		type: 'move',
+		item: [{ from: '/DATA/New folder' }],
+		to: '/DATA/Syncthing',
+	}, cookie)
+	assert.equal(move.status, 403)
+	assert.equal((await move.json()).message,
+		'Files could not move the selection to “/DATA/Syncthing”. Check that the Files service account has write access to the source and destination folders on the server.')
+	assert.deepEqual(await readdir(destination), [])
+	assert.deepEqual(await readdir(join(dataDirectory, 'New folder')), [])
 })
 
 it('saves a folder icon across renames, moves and server restarts', async (t) => {
