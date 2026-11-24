@@ -42,7 +42,7 @@ describe('escape in the modals of the virtual machine page', () => {
 		expect(stillOpen('.vm-path-picker', '.vm-create', '.vm-page')).toEqual([['.vm-path-picker', true], ['.vm-create', true], ['.vm-page', true]])
 
 		await press()
-		expect(stillOpen('.vm-path-picker', '.vm-create', '.vm-page')).toEqual([['.vm-path-picker', false], ['.vm-create', true], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-path-picker', '.vm-create', '.vm-page')).toEqual([['.vm-path-picker', false], ['.vm-create', true], ['.vm-page', true]]))
 	})
 
 	it('closes the download dialog over the create form, and only that', async () => {
@@ -52,7 +52,7 @@ describe('escape in the modals of the virtual machine page', () => {
 		expect(isOpen('.vm-download')).toBe(true)
 
 		await press()
-		expect(stillOpen('.vm-download', '.vm-create', '.vm-page')).toEqual([['.vm-download', false], ['.vm-create', true], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-download', '.vm-create', '.vm-page')).toEqual([['.vm-download', false], ['.vm-create', true], ['.vm-page', true]]))
 	})
 
 	it('closes the picker over the settings, and only the picker', async () => {
@@ -62,7 +62,7 @@ describe('escape in the modals of the virtual machine page', () => {
 		expect(isOpen('.vm-path-picker')).toBe(true)
 
 		await press()
-		expect(stillOpen('.vm-path-picker', '.vm-storage-settings', '.vm-page')).toEqual([['.vm-path-picker', false], ['.vm-storage-settings', true], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-path-picker', '.vm-storage-settings', '.vm-page')).toEqual([['.vm-path-picker', false], ['.vm-storage-settings', true], ['.vm-page', true]]))
 	})
 
 	it('closes the picker and the download dialog of the CD-ROM, and not the page', async () => {
@@ -71,12 +71,12 @@ describe('escape in the modals of the virtual machine page', () => {
 		await click('.vm-detail button', 'Browse…')
 		expect(isOpen('.vm-path-picker')).toBe(true)
 		await press()
-		expect(stillOpen('.vm-path-picker', '.vm-page')).toEqual([['.vm-path-picker', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-path-picker', '.vm-page')).toEqual([['.vm-path-picker', false], ['.vm-page', true]]))
 
 		await click('.vm-detail button[title="Download from a URL"]')
 		expect(isOpen('.vm-download')).toBe(true)
 		await press()
-		expect(stillOpen('.vm-download', '.vm-page')).toEqual([['.vm-download', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-download', '.vm-page')).toEqual([['.vm-download', false], ['.vm-page', true]]))
 	})
 
 	it('closes the delete dialog, and not the page', async () => {
@@ -85,7 +85,7 @@ describe('escape in the modals of the virtual machine page', () => {
 		expect(isOpen('.vm-delete')).toBe(true)
 
 		await press()
-		expect(stillOpen('.vm-delete', '.vm-page')).toEqual([['.vm-delete', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-delete', '.vm-page')).toEqual([['.vm-delete', false], ['.vm-page', true]]))
 	})
 
 	it('closes a confirmation, and not the page', async () => {
@@ -94,21 +94,21 @@ describe('escape in the modals of the virtual machine page', () => {
 		expect(isOpen('.dialog')).toBe(true)
 
 		await press()
-		expect(stillOpen('.dialog', '.vm-page')).toEqual([['.dialog', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.dialog', '.vm-page')).toEqual([['.dialog', false], ['.vm-page', true]]))
 		expect(vmApi.action).not.toHaveBeenCalled()
 	})
 
 	it('closes the page when it is alone', async () => {
 		await openPage()
 		await press()
-		expect(isOpen('.vm-page')).toBe(false)
+		await vi.waitFor(() => expect(isOpen('.vm-page')).toBe(false))
 	})
 
 	it('closes the create form, and not the page under it', async () => {
 		await openPage()
 		await click('[title="New virtual machine"]')
 		await press()
-		expect(stillOpen('.vm-create', '.vm-page')).toEqual([['.vm-create', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-create', '.vm-page')).toEqual([['.vm-create', false], ['.vm-page', true]]))
 	})
 
 	it('asks before closing the create form while an image uploads, and closes it on yes', async () => {
@@ -129,20 +129,20 @@ describe('escape in the modals of the virtual machine page', () => {
 		expect(document.querySelector('.dialog .media-content').textContent.trim()).toBe('An image is still uploading. Close and stop the upload?')
 		// Escape is the dialog's: it goes, the form stays and the upload runs on
 		await press()
-		expect(stillOpen('.dialog', '.vm-create')).toEqual([['.dialog', false], ['.vm-create', true]])
+		await vi.waitFor(() => expect(stillOpen('.dialog', '.vm-create')).toEqual([['.dialog', false], ['.vm-create', true]]))
 		expect(signal.aborted).toBe(false)
 
 		await press()
 		await click('.dialog button', 'Stop the upload')
 		expect(signal.aborted).toBe(true)
-		expect(stillOpen('.vm-create', '.vm-page')).toEqual([['.vm-create', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-create', '.vm-page')).toEqual([['.vm-create', false], ['.vm-page', true]]))
 	})
 
 	it('closes the settings, and not the page under them', async () => {
 		await openPage()
 		await click('[title="Virtual machine settings"]')
 		await press()
-		expect(stillOpen('.vm-storage-settings', '.vm-page')).toEqual([['.vm-storage-settings', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-storage-settings', '.vm-page')).toEqual([['.vm-storage-settings', false], ['.vm-page', true]]))
 	})
 
 	it('closes one dialog per press, from the picker down to the page', async () => {
@@ -153,11 +153,11 @@ describe('escape in the modals of the virtual machine page', () => {
 
 		expect(open()).toEqual([true, true, true])
 		await press()
-		expect(open()).toEqual([false, true, true])
+		await vi.waitFor(() => expect(open()).toEqual([false, true, true]))
 		await press()
-		expect(open()).toEqual([false, false, true])
+		await vi.waitFor(() => expect(open()).toEqual([false, false, true]))
 		await press()
-		expect(open()).toEqual([false, false, false])
+		await vi.waitFor(() => expect(open()).toEqual([false, false, false]))
 	})
 
 	it('leaves the page alone while the console, which keeps Escape for the VM, is open over it', async () => {
@@ -173,10 +173,10 @@ describe('escape in the modals of the virtual machine page', () => {
 		await openPage()
 		await click('[title="New virtual machine"]')
 		await click('.vm-create button', 'Cancel')
-		expect(stillOpen('.vm-create', '.vm-page')).toEqual([['.vm-create', false], ['.vm-page', true]])
+		await vi.waitFor(() => expect(stillOpen('.vm-create', '.vm-page')).toEqual([['.vm-create', false], ['.vm-page', true]]))
 
 		await click('.vm-page header button[aria-label="Close"]')
-		expect(isOpen('.vm-page')).toBe(false)
+		await vi.waitFor(() => expect(isOpen('.vm-page')).toBe(false))
 	})
 
 	it('has a close button the keyboard can reach, and a name for it', async () => {
