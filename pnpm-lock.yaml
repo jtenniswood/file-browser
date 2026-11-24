@@ -204,11 +204,11 @@ importers:
         specifier: ^4.19.0
         version: 4.19.0
       xterm-addon-attach:
-        specifier: ^0.6.0
-        version: 0.6.0(xterm@4.19.0)
+        specifier: ^0.9.0
+        version: 0.9.0(xterm@4.19.0)
       xterm-addon-fit:
-        specifier: ^0.5.0
-        version: 0.5.0(xterm@4.19.0)
+        specifier: ^0.8.0
+        version: 0.8.0(xterm@4.19.0)
     devDependencies:
       '@antfu/eslint-config':
         specifier: ^2.27.3
@@ -7480,17 +7480,17 @@ packages:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
 
-  xterm-addon-attach@0.6.0:
-    resolution: {integrity: sha512-Mo8r3HTjI/EZfczVCwRU6jh438B4WLXxdFO86OB7bx0jGhwh2GdF4ifx/rP+OB+Cb2vmLhhVIZ00/7x3YSP3dg==}
+  xterm-addon-attach@0.9.0:
+    resolution: {integrity: sha512-NykWWOsobVZPPK3P9eFkItrnBK9Lw0f94uey5zhqIVB1bhswdVBfl+uziEzSOhe2h0rT9wD0wOeAYsdSXeavPw==}
     deprecated: This package is now deprecated. Move to @xterm/addon-attach instead.
     peerDependencies:
-      xterm: ^4.0.0
+      xterm: ^5.0.0
 
-  xterm-addon-fit@0.5.0:
-    resolution: {integrity: sha512-DsS9fqhXHacEmsPxBJZvfj2la30Iz9xk+UKjhQgnYNkrUIN5CYLbw7WEfz117c7+S86S/tpHPfvNxJsF5/G8wQ==}
+  xterm-addon-fit@0.8.0:
+    resolution: {integrity: sha512-yj3Np7XlvxxhYF/EJ7p3KHaMt6OdwQ+HDu573Vx1lRXsVxOcnVJs51RgjZOouIZOczTsskaS+CpXspK81/DLqw==}
     deprecated: This package is now deprecated. Move to @xterm/addon-fit instead.
     peerDependencies:
-      xterm: ^4.0.0
+      xterm: ^5.0.0
 
   xterm@4.19.0:
     resolution: {integrity: sha512-c3Cp4eOVsYY5Q839dR5IejghRPpxciGmLWWaP9g+ppfMeBChMeLa1DCA+pmX/jyDZ+zxFOmlJL/82qVdayVoGQ==}
@@ -15382,11 +15382,11 @@ snapshots:
 
   xtend@4.0.2: {}
 
-  xterm-addon-attach@0.6.0(xterm@4.19.0):
+  xterm-addon-attach@0.9.0(xterm@4.19.0):
     dependencies:
       xterm: 4.19.0
 
-  xterm-addon-fit@0.5.0(xterm@4.19.0):
+  xterm-addon-fit@0.8.0(xterm@4.19.0):
     dependencies:
       xterm: 4.19.0
 
