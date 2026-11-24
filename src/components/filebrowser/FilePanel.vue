@@ -1456,6 +1456,7 @@ export default {
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
+	justify-content: flex-end;
 	min-height: 2.5rem;
 	padding: 0 1.5rem;
 	border-top: 1px solid var(--casa-border-subtle);
@@ -1465,8 +1466,42 @@ export default {
 	width: min(100%, 7.5rem);
 	height: 2rem;
 	margin: 0;
-	accent-color: var(--casa-text-secondary);
 	cursor: pointer;
+
+	@media (forced-colors: none) {
+		appearance: none;
+		background: transparent;
+
+		&::-webkit-slider-runnable-track {
+			height: 4px;
+			border-radius: 2px;
+			background: var(--casa-border-strong);
+		}
+
+		&::-moz-range-track {
+			height: 4px;
+			border-radius: 2px;
+			background: var(--casa-border-strong);
+		}
+
+		&::-webkit-slider-thumb {
+			appearance: none;
+			width: 12px;
+			height: 12px;
+			margin-top: -4px;
+			border: 0;
+			border-radius: 50%;
+			background: #949494;
+		}
+
+		&::-moz-range-thumb {
+			width: 12px;
+			height: 12px;
+			border: 0;
+			border-radius: 50%;
+			background: #949494;
+		}
+	}
 }
 
 .full-screen {
