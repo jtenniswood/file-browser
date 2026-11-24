@@ -1,6 +1,6 @@
 # File Browser
 
-File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, and edit files, as well as move, copy, star, and trash them.
+File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, edit, move, copy, star, and permanently delete files.
 
 ## Install with Docker
 
@@ -57,7 +57,9 @@ docker compose pull
 docker compose up -d --wait
 ```
 
-Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep accounts, starred items, and trash. Files in the trash are kept for 30 days. Run one container per data folder.
+Run `docker compose down` to stop and remove the container. Your files stay in the host folder. Include its hidden `.files-state` directory in private backups to keep accounts and starred items. Run one container per data folder.
+
+After an upgrade, any files still in the former Trash remain in the hidden `.files-state` directory on the host. In each entry folder, `entry.json` records the original path and `data` holds the file or folder. You can copy the contents back from the host.
 
 ## Build from source
 

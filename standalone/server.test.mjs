@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -40,6 +40,11 @@ it('standalone Files serves and updates only the configured data directory', asy
 	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
 	await writeFile(join(directory, 'private.txt'), 'outside the data folder')
 	await symlink(directory, join(dataDirectory, 'outside'))
+	const state = join(dataDirectory, '.files-state')
+	const previousEntry = join(state, 'e8dfcc3c-d292-478a-9d8f-fb961b52958c')
+	await mkdir(previousEntry, { recursive: true })
+	await writeFile(join(previousEntry, 'entry.json'), JSON.stringify({ path: '/DATA/old.txt', deleted_at: '2020-01-01T00:00:00Z' }))
+	await writeFile(join(previousEntry, 'data'), 'previously deleted file')
 	const options = { assetsDirectory, directory: dataDirectory, maxUploadBytes: 64 }
 	const { origin } = await startServer(options, t)
 	assert.equal((await fetch(`${origin}/v1/folder?path=/DATA`)).status, 401)
@@ -88,14 +93,15 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.match(contents, /Docs\/renamed\.txt/)
 	assert.match(contents, /Photos\/hello, world\.txt/)
 
-	assert.equal((await request('/v1/batch?to_trash=true', 'DELETE', ['/DATA/Docs'])).status, 200)
-	assert.deepEqual((await list()).map(item => item.name), ['Photos'])
-	const { items } = (await (await request('/v1/file/trash')).json()).data
-	assert.equal(items[0].path, '/DATA/Docs')
-	assert.equal((await request('/v1/file/trash/restore', 'POST', items)).status, 200)
+	assert.equal((await request('/v1/batch?to_trash=true', 'DELETE', ['/DATA/Docs'])).status, 400)
+	assert.equal((await request('/v1/batch', 'DELETE', ['/DATA/Docs', '/DATA'])).status, 403)
 	assert.equal(await readFile(join(dataDirectory, 'Docs/renamed.txt'), 'utf8'), 'hello')
-	assert.equal((await request('/v1/batch', 'DELETE', ['/DATA/Photos'])).status, 200)
-	assert.deepEqual((await list()).map(item => item.name), ['Docs'])
+	const stateBeforeDeletion = await readdir(state)
+	assert.equal((await request('/v1/batch', 'DELETE', ['/DATA/Docs', '/DATA/Docs/renamed.txt', '/DATA/Photos'])).status, 200)
+	assert.deepEqual(await list(), [])
+	assert.deepEqual(await readdir(state), stateBeforeDeletion)
+	assert.equal(await readFile(join(previousEntry, 'data'), 'utf8'), 'previously deleted file')
+	assert.equal((await request('/v1/file/trash')).status, 404)
 })
 
 const networkAddress = '192.168.1.50'

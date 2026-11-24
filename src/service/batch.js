@@ -31,9 +31,8 @@ const batch = {
 		return api.delete(`${PREFIX}/${id}/task`)
 	},
 
-	// delete files or folders; toTrash moves them to the trash of their disk instead
-	delete(files, toTrash = false) {
-		return api.delete(toTrash ? `${PREFIX}?to_trash=true` : `${PREFIX}`, files)
+	delete(files) {
+		return api.delete(PREFIX, files)
 	},
 
 }
