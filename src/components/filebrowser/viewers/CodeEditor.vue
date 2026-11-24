@@ -3,12 +3,14 @@
 		<header class="modal-card-head">
 			<div class="is-flex-grow-1 is-flex ">
 				<!-- Title Start -->
-				<h3 class="title is-5 one-line mr-4">{{ $t('Code Editor') }}</h3>
+				<h3 class="title is-5 one-line mr-4">{{ isPreviewingHtml ? item.name : $t('Code Editor') }}</h3>
 				<!-- Title End -->
 			</div>
 			<div class="is-flex is-align-items-center">
+				<b-button v-if="isHtml" :disabled="!hasFileContent" :label="$t(isPreviewingHtml ? 'Edit' : 'Preview')"
+					class="mr-2" rounded size="is-small" @click="toggleHtmlPreview" />
 				<!-- Save File Button Start -->
-				<b-button :label="$t('Save')" class="mr-3" icon-left="content-save" rounded size="is-small" type="is-dark"
+				<b-button v-if="!isPreviewingHtml" :label="$t('Save')" class="mr-3" icon-left="content-save" rounded size="is-small" type="is-dark"
 					@click="saveFile(false)" />
 				<!-- Save File Button Start -->
 
@@ -35,8 +37,13 @@
 		</div>
 		<!-- Editor Breadcrumb End -->
 
+		<div v-if="isPreviewingHtml" class="v-container html-preview">
+			<p v-if="fileReadFailed" class="html-preview-status" role="alert">{{ $t('The preview could not be loaded.') }}</p>
+			<p v-else-if="!hasFileContent" class="html-preview-status" role="status">{{ $t('Loading...') }}</p>
+			<html-preview v-else :code="code" :title="item.name" />
+		</div>
 		<!-- Editor Start -->
-		<div class="is-flex is-justify-content-center is-align-items-center is-flex-grow-1 v-container pb-5">
+		<div v-show="!isPreviewingHtml" class="is-flex is-justify-content-center is-align-items-center is-flex-grow-1 v-container pb-5">
 			<codemirror ref="cmEditor" :value="code" :options="cmOptions" @input="onCmCodeChange" @ready="onCmReady" />
 		</div>
 		<!-- Editor End -->
@@ -123,6 +130,7 @@ import { JSHINT } from 'jshint'
 import jsonlint from 'jsonlint-mod'
 import jsyaml from 'js-yaml'
 import escape from 'lodash/escape'
+import HtmlPreview from './HtmlPreview.vue'
 import codemirror from '@/components/basicComponents/CodeMirror.vue'
 import { mixin } from '@/mixins/mixin'
 
@@ -134,6 +142,7 @@ window.jsyaml = jsyaml
 export default {
 	components: {
 		Codemirror: codemirror,
+		HtmlPreview,
 	},
 	mixins: [mixin],
 	props: {
@@ -150,6 +159,9 @@ export default {
 	data() {
 		return {
 			code: '',
+			hasFileContent: false,
+			fileReadFailed: false,
+			showSource: false,
 			isChange: false,
 			cmOptions: {
 				tabSize: 4,
@@ -186,6 +198,12 @@ export default {
 	},
 
 	computed: {
+		isHtml() {
+			return ['html', 'htm'].includes(this.getFileExt(this.item).toLowerCase())
+		},
+		isPreviewingHtml() {
+			return this.isHtml && !this.showSource
+		},
 		codemirror() {
 			return this.$refs.cmEditor.codemirror
 		},
@@ -198,6 +216,11 @@ export default {
 	},
 
 	methods: {
+		toggleHtmlPreview() {
+			this.showSource = !this.showSource
+			if (this.showSource)
+				this.$nextTick(() => this.codemirror.refresh())
+		},
 		// The editor wrapper takes `value` and emits `input`: a v-model here would pass `modelValue`,
 		// which it ignores, and every file would open empty.
 		onCmCodeChange(text) {
@@ -227,10 +250,15 @@ export default {
 				this.code = typeof res.data === 'object'
 					? JSON.stringify(res.data, null, 2)
 					: String(res.data)
+				this.hasFileContent = true
 				this.$nextTick(() => {
 					this.isChange = false
 				})
-			}).catch(error => this.showFileError(error))
+			}).catch((error) => {
+				this.fileReadFailed = true
+				if (!this.isPreviewingHtml)
+					this.showFileError(error)
+			})
 		},
 		showFileError(error) {
 			this.$buefy.toast.open({
@@ -288,4 +316,16 @@ export default {
 }
 </script>
 
-<style></style>
+<style scoped>
+.html-preview {
+	background-color: var(--casa-surface);
+}
+
+.html-preview-status {
+	display: grid;
+	height: 100%;
+	place-items: center;
+	padding: 1rem;
+	text-align: center;
+}
+</style>
