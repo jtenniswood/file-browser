@@ -290,15 +290,16 @@ export const mixin = {
 
 			// the paths are gone from where they were: their shortcuts go, and the list is read again
 			const removed = async (paths) => {
-				const shotcutData = this.$store.state.shortcutData
-				const updatedShotcutData = shotcutData.filter((item) => {
+				const shortcuts = this.$store.state.shortcutData
+				const remaining = shortcuts.filter((item) => {
 					if (paths.includes(item.path)) {
 						deleteShortcut(item)
 						return false
 					}
-					return true
+					return item.type === 'file' || !paths.some(path => item.path.startsWith(`${path}/`))
 				})
-				await this.$store.dispatch('SET_SHORTCUT_DATA', updatedShotcutData)
+				if (remaining.length !== shortcuts.length)
+					await this.$store.dispatch('SET_SHORTCUT_DATA', remaining)
 				reload()
 			}
 

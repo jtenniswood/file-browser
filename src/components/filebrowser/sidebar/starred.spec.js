@@ -11,7 +11,11 @@ const listings = {
 	'/DATA': [{ path: '/DATA/Projects', is_dir: true, extensions: { share: { shared: 'true' } } }],
 	'/DATA/Media': [{ path: '/DATA/Media/notes.txt', is_dir: false, name: 'notes.txt' }, { path: '/DATA/Media/Films', is_dir: false }],
 }
-const listFolder = vi.fn(path => listings[path] ? Promise.resolve(listings[path]) : Promise.reject(new Error('no such folder')))
+const listFolder = vi.fn(async (path) => {
+	if (!listings[path])
+		throw Object.assign(new Error('no such folder'), { response: { status: 404 } })
+	return listings[path]
+})
 
 describe('the Starred list in the sidebar', () => {
 	it('shows one Files list, applies the saved order and appends new entries', () => {
@@ -47,14 +51,25 @@ describe('the Starred list in the sidebar', () => {
 		expect(list[2]).toMatchObject({ entry: null, extensions: null })
 	})
 
-	it('marks unavailable a folder that became a file, an entry whose folder is gone, and keeps a picked icon', async () => {
+	it('omits missing folders, folders replaced by files, and pins inside deleted folders', async () => {
 		const list = await checkStarred([
-			{ name: 'Films', path: '/DATA/Media/Films', type: 'folder', icon: 'media-outline' },
+			{ name: 'Projects', path: '/DATA/Projects', icon: 'media-outline' },
+			{ name: 'Gone', path: '/DATA/Gone', type: 'folder' },
+			{ name: 'Films', path: '/DATA/Media/Films', type: 'folder' },
 			{ name: 'Old', path: '/DATA/Old/x', type: 'folder' },
 		], listFolder)
 
-		expect(list.map(i => i.unavailable)).toEqual([true, true])
-		expect(list[0].icon).toBe('media-outline')
+		expect(list).toHaveLength(1)
+		expect(list[0]).toMatchObject({ path: '/DATA/Projects', icon: 'media-outline' })
+	})
+
+	it('keeps a folder pin when its parent cannot be checked', async () => {
+		const pin = { name: 'Work', path: '/DATA/Drive/Work', type: 'folder' }
+		const list = await checkStarred([pin], async () => {
+			throw Object.assign(new Error('access denied'), { response: { status: 403 } })
+		})
+
+		expect(list).toMatchObject([{ ...pin, unavailable: true }])
 	})
 
 	it('uses the matching small icons for old and new folder pins, including folders nested elsewhere', async () => {

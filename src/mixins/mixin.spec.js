@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mixin } from './mixin'
 
 const panelOf = name => mixin.methods.getPanelType({ name })
@@ -19,4 +19,22 @@ describe('getPanelType', () => {
 	it('offers no panel for a binary it does not know', () => {
 		expect(panelOf('firmware.bin')).toBeNull()
 	})
+})
+
+it('removes nested folder pins after a successful deletion and keeps similarly named folders', async () => {
+	const nested = { path: '/DATA/Photos/Trips', type: 'folder' }
+	const other = { path: '/DATA/Photos Backup/Trips', type: 'folder' }
+	const dispatch = vi.fn()
+	const reload = vi.fn()
+	const context = {
+		$api: { batch: { delete: vi.fn().mockResolvedValue({ data: { success: 200 } }) } },
+		$refs: {},
+		$store: { state: { shortcutData: [nested, other] }, dispatch },
+		reload,
+	}
+
+	mixin.methods.deleteItem.call(context, { path: '/DATA/Photos' })
+
+	await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce())
+	expect(dispatch).toHaveBeenCalledExactlyOnceWith('SET_SHORTCUT_DATA', [other])
 })
