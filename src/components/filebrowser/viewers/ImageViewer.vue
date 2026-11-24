@@ -88,7 +88,6 @@ import { component as Viewer } from 'v-viewer'
 import { mixin } from '@/mixins/mixin'
 import 'viewerjs/dist/viewer.css'
 
-const XIMAGES = ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff']
 export default {
 	mixins: [mixin],
 	props: {
@@ -180,10 +179,7 @@ export default {
 			}
 		},
 		filterImages() {
-			this.itemList = this.list.filter((item) => {
-				const ext = this.getFileExt(item)
-				return (!item.is_dir && XIMAGES.includes(ext.toLowerCase()))
-			})
+			this.itemList = this.list.filter(item => !item.is_dir && this.getPanelType(item) === 'image-viewer')
 		},
 		getCurrentImageIndex() {
 			this.itemList.forEach((item, index) => {

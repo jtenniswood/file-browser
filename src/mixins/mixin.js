@@ -8,7 +8,7 @@ import { automaticFolderIcon } from '@/components/filebrowser/automaticFolderIco
 import { customFolderIcon } from '@/components/filebrowser/folderIcons'
 
 const typeMap = {
-	'image-x-generic': ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'svg', 'tiff'],
+	'image-x-generic': ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'avif', 'svg', 'tiff'],
 	'video-x-generic': ['mkv', 'mp4', '3gp', 'avi', 'm2ts', 'webm', 'flv', 'vob', 'ts', 'mts', 'mov', 'wmv', 'rm', 'rmvb', 'asf', 'wmv', 'mpg', 'm4v', 'mpeg', 'f4v'],
 	'audio-x-generic': ['aac', 'aiff', 'alac', 'amr', 'ape', 'flac', 'm4a', 'mp3', 'ogg', 'opus', 'wma', 'wav'],
 	'text-x-generic': ['txt', 'log', 'pages', 'conf', 'config', 'list', 'ini', 'toml', 'cfg', 'rc', 'env', 'service', 'conf.d', 'htaccess', 'gitconfig', 'vim', 'curlrc', 'wgetrc', 'gitignore', 'm3u', 'm3u8', 'strm', 'nfo', 'vtt', 'properties', 'ovpn', 'patch', 'readme', 'license', 'lock', 'awk', 'cjs', 'desktop', 'gradle', 'jsx', 'lst', 'mjs', 'pls', 'rules', 'sed', 'socket', 'ssa', 'timer', 'tsx', 'webmanifest', 'xspf', 'pem', 'crt', 'cert', 'key', 'pub', 'sub'],

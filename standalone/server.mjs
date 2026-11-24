@@ -35,6 +35,7 @@ const previewTypes = {
 	'.png': 'image/png',
 	'.gif': 'image/gif',
 	'.webp': 'image/webp',
+	'.avif': 'image/avif',
 	'.bmp': 'image/bmp',
 	'.tiff': 'image/tiff',
 	'.svg': 'image/svg+xml',
