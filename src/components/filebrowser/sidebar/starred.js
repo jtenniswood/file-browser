@@ -62,7 +62,7 @@ export function orderSidebarPaths(entries, order) {
 
 /**
  * The Starred entries as the sidebar shows them: each one is looked up in a listing of its parent
- * folder (one listing per parent), and is unavailable when it is gone or is no longer a file / a folder.
+ * folder (one listing per parent). A folder pin is omitted when its path no longer points to a folder.
  * @param {Array} items the saved entries: { name, path, type: 'folder' | 'file', ... }
  * @param {Function} listFolder path => Promise of the folder's entries ({ path, is_dir, extensions, ... })
  * @return {Promise<Array>} new objects; `entry` is the listing entry when the item was found
@@ -71,15 +71,21 @@ export async function checkStarred(items, listFolder) {
 	const listings = {}
 	await Promise.all([...new Set(items.map(item => parentOf(item.path)))].map(async (parent) => {
 		try {
-			listings[parent] = (await listFolder(parent)) || []
-		} catch {
-			listings[parent] = []
+			const listing = await listFolder(parent)
+			if (Array.isArray(listing))
+				listings[parent] = listing
+		} catch (error) {
+			if (error?.response?.status === 404)
+				listings[parent] = []
 		}
 	}))
-	return items.map((item) => {
+	return items.flatMap((item) => {
 		const isFile = item.type === 'file'
-		const entry = listings[parentOf(item.path)].find(e => e.path === item.path && Boolean(e.is_dir) !== isFile)
-		return {
+		const listing = listings[parentOf(item.path)]
+		const entry = listing?.find(e => e.path === item.path && Boolean(e.is_dir) !== isFile)
+		if (!isFile && listing && !entry)
+			return []
+		return [{
 			...item,
 			icon: shortcutIcon(item, entry, isFile),
 			pack: 'casa',
@@ -87,6 +93,6 @@ export async function checkStarred(items, listFolder) {
 			unavailable: !entry,
 			entry: entry || null,
 			extensions: entry ? entry.extensions : null,
-		}
+		}]
 	})
 }
