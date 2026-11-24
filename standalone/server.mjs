@@ -225,7 +225,6 @@ export async function createFilesServer({
 	if (!assets || !(await stat(resolve(assets, 'index.html')).catch(() => null))?.isFile())
 		throw new Error('Build the frontend with pnpm build:files before starting Files.')
 	const store = await openStorage(directory)
-	await store.trash()
 	const accounts = await openAccounts(store.state, setupCode)
 	if (setupCode && accounts.setupRequired())
 		onSetupCode?.(setupCode)
@@ -298,17 +297,9 @@ export async function createFilesServer({
 					await store.batchTask((await bodyOf(request)) || {})
 					break
 				case 'DELETE /v1/batch':
-					await store.remove(await bodyOf(request), searchParams.get('to_trash') === 'true')
-					break
-				case 'GET /v1/file/trash':
-					data = await store.trash()
-					break
-				case 'POST /v1/file/trash/restore':
-				case 'DELETE /v1/file/trash':
-					data = await store.editTrash(await bodyOf(request), method === 'POST')
-					break
-				case 'DELETE /v1/file/trash/all':
-					await store.emptyTrash()
+					if (searchParams.size)
+						throw new RequestError(400, 'File deletion does not accept query parameters.')
+					await store.remove(await bodyOf(request))
 					break
 				case 'GET /v1/users/current/custom/shortcut':
 					data = await store.shortcuts()

@@ -1222,7 +1222,7 @@
                 text-align: left;
             }
 
-            &:not(.trash-row) > :is(.th, .td) {
+            > :is(.th, .td) {
                 &:nth-child(1) {
                     width: 2rem !important;
                     min-width: auto;

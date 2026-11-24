@@ -1,5 +1,4 @@
 import { Buffer } from 'node:buffer'
-import { randomUUID } from 'node:crypto'
 import { constants, createWriteStream } from 'node:fs'
 import { access, chmod, cp, link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, relative, sep } from 'node:path'
@@ -8,8 +7,6 @@ import { pipeline } from 'node:stream/promises'
 
 export const rootPath = '/DATA'
 const stateName = '.files-state'
-const retentionDays = 30
-const uuidPattern = /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/
 
 export class RequestError extends Error {
 	constructor(status, message) {
@@ -235,76 +232,16 @@ export async function openStorage(directory) {
 		}
 	}
 
-	async function trashRows() {
-		const rows = []
-		for (const name of await readdir(state)) {
-			if (!uuidPattern.test(name))
-				continue
-			const directory = join(state, name)
-			if (!(await lstat(directory)).isDirectory())
-				continue
-			const item = await optionalStat(join(directory, 'data'))
-			if (!item)
-				continue
-			const entry = JSON.parse(await readFile(join(directory, 'entry.json'), 'utf8'))
-			if (Date.now() - Date.parse(entry.deleted_at) >= retentionDays * 86400000) {
-				await rm(directory, { recursive: true, force: true })
-				continue
-			}
-			rows.push({ ...entry, name, trash: 'local', size: item.size })
-		}
-		return rows
-	}
-
-	async function remove(paths, toTrash) {
+	async function remove(paths) {
 		if (!Array.isArray(paths) || !paths.length)
 			throw new RequestError(400, 'Choose files to delete.')
 		const entries = []
-		for (const path of new Set(paths))
-			entries.push({ path, ...await locate(path, { allowRoot: false }) })
-		if (toTrash)
-			await trashRows()
-		for (const entry of entries) {
-			if (!toTrash) {
-				await rm(entry.target, { recursive: true })
-				continue
-			}
-			const directory = join(state, randomUUID())
-			await mkdir(directory, { mode: 0o700 })
-			try {
-				await writeFile(join(directory, 'entry.json'), JSON.stringify({
-					path: entry.path,
-					is_dir: entry.stat.isDirectory(),
-					deleted_at: new Date().toISOString(),
-				}))
-				await rename(entry.target, join(directory, 'data'))
-			} catch (error) {
-				await rm(directory, { recursive: true, force: true })
-				throw error
-			}
+		for (const path of new Set(paths)) {
+			const { target } = await locate(path, { allowRoot: false })
+			entries.push(target)
 		}
-	}
-
-	async function editTrash(references, restore) {
-		if (!Array.isArray(references) || !references.length)
-			throw new RequestError(400, 'Choose items in the trash.')
-		const available = new Map((await trashRows()).map(row => [row.name, row]))
-		const restored = []
-		for (const reference of references) {
-			const { name, trash } = reference || {}
-			const row = available.get(name)
-			if (trash !== 'local' || !row)
-				throw new RequestError(404, 'That item is no longer in the trash.')
-			const directory = join(state, name)
-			if (restore) {
-				const target = await newEntry(row.path)
-				await rename(join(directory, 'data'), target)
-				restored.push(row.path)
-			}
-			await rm(directory, { recursive: true, force: true })
-			available.delete(name)
-		}
-		return restored
+		for (const target of entries)
+			await rm(target, { recursive: true, force: true })
 	}
 
 	const shortcutFile = join(state, 'shortcuts.json')
@@ -352,17 +289,7 @@ export async function openStorage(directory) {
 			})
 		}),
 		batchTask: task => change(() => batchTask(task)),
-		remove: (paths, toTrash) => change(() => remove(paths, toTrash)),
-		trash: () => change(async () => {
-			const items = await trashRows()
-			return { items, size: items.reduce((size, item) => size + item.size, 0), retention_days: retentionDays }
-		}),
-		editTrash: (items, restore) => change(() => editTrash(items, restore)),
-		emptyTrash: () => change(async () => {
-			const rows = await trashRows()
-			for (const { name } of rows)
-				await rm(join(state, name), { recursive: true, force: true })
-		}),
+		remove: paths => change(() => remove(paths)),
 		shortcuts: async () => (await optionalStat(shortcutFile)) ? JSON.parse(await readFile(shortcutFile, 'utf8')) : [],
 		setShortcuts: items => change(async () => {
 			if (!Array.isArray(items) || items.some(item => !item || typeof item.name !== 'string' || typeof item.path !== 'string'))
