@@ -495,7 +495,7 @@ export default {
 			return this.$route.path == '/files' ? 'file-panel full-screen ' : ''
 		},
 		settingsOpen() {
-			return this.$standaloneFiles && this.$route.query.settings !== undefined
+			return this.$route.query?.settings !== undefined && this.$standaloneFiles
 		},
 		sideBarPosition() {
 			return this.isMobile ? 'fixed' : 'static'
