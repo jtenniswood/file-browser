@@ -20,21 +20,19 @@ jobs:
           persist-credentials: false
       - name: Build the container
         run: docker build --tag file-browser:test .
-      - name: Check sign-in and file access
+      - name: Check local file access
         shell: bash
         run: |
-          password=$(openssl rand -hex 24)
           docker run -d --name file-browser-test \
-            --publish 127.0.0.1:18080:8080 \
-            --env FILES_PASSWORD="$password" file-browser:test
+            --publish 127.0.0.1:18080:8080 file-browser:test
           trap 'docker logs file-browser-test; docker rm -f file-browser-test' EXIT
           url=http://127.0.0.1:18080
           curl -fsS --retry 15 --retry-all-errors --retry-delay 1 "$url/healthz"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' "$url/")" = 401
-          curl -fsS --user "files:$password" "$url/" -o /dev/null
-          curl -fsS --user "files:$password" --header 'Content-Type: application/json' \
+          curl -fsS "$url/" -o /dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: untrusted.test' "$url/")" = 403
+          curl -fsS --header 'Content-Type: application/json' \
             --data '{"path":"/DATA/smoke"}' "$url/v1/folder"
-          curl -fsS --user "files:$password" "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
+          curl -fsS "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
 
   publish:
     name: Publish to GitHub Container Registry

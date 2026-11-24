@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
-import { get } from 'node:http'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { it } from 'vitest'
@@ -18,24 +18,23 @@ it('standalone Files serves and updates only the configured data directory', asy
 	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
 	await writeFile(join(directory, 'private.txt'), 'outside the data folder')
 	await symlink(directory, join(dataDirectory, 'outside'))
-	const password = 'local-test-password'
-	const options = { assetsDirectory, directory: dataDirectory, password, maxUploadBytes: 64 }
+	const options = { assetsDirectory, directory: dataDirectory, maxUploadBytes: 64 }
 	const server = await createFilesServer(options)
 	t.onTestFinished(() => server.close())
 	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 	const origin = `http://127.0.0.1:${server.address().port}`
-	const credentials = `Basic ${Buffer.from(`files:${password}`).toString('base64')}`
 	const request = (path, method = 'GET', body, extra = {}) => fetch(origin + path, {
 		method,
-		headers: { authorization: credentials, ...extra },
+		headers: extra,
 		body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
 	})
 	const list = async (path = '/DATA') => (await (await request(`/v1/folder?${new URLSearchParams({ path })}`)).json()).data.content
 
 	assert.equal((await fetch(`${origin}/healthz`)).status, 200)
-	assert.equal((await fetch(`${origin}/`)).status, 401)
-	assert.equal((await fetch(`${origin}/v1/folder?path=/DATA`)).status, 401)
-	assert.equal(await (await request('/')).text(), '<title>Files</title>')
+	const home = await request('/')
+	assert.equal(home.status, 200)
+	assert.equal(home.headers.get('www-authenticate'), null)
+	assert.equal(await home.text(), '<title>Files</title>')
 	assert.deepEqual(await list(), [])
 	assert.equal((await request('/v1/folder?path=/DATA/outside')).status, 403)
 	assert.equal((await request('/v3/file?path=/DATA/%2e%2e/private.txt')).status, 400)
@@ -77,15 +76,14 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.deepEqual((await list()).map(item => item.name), ['Docs'])
 })
 
-it('allows passwordless localhost navigation and blocks requests from other sites', async (t) => {
+it.for([undefined, 'https://files.example.test'])('checks request hosts and origins (public origin: %s)', async (publicOrigin, t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-local-'))
 	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
 	const assetsDirectory = join(directory, 'assets')
 	const dataDirectory = join(directory, 'data')
 	await mkdir(assetsDirectory)
 	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
-	await assert.rejects(createFilesServer({ assetsDirectory, directory: dataDirectory }), /FILES_PASSWORD/)
-	const server = await createFilesServer({ assetsDirectory, directory: dataDirectory, localNoAuth: true })
+	const server = await createFilesServer({ assetsDirectory, directory: dataDirectory, publicOrigin })
 	t.onTestFinished(() => server.close())
 	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 	const origin = `http://127.0.0.1:${server.address().port}`
@@ -93,13 +91,27 @@ it('allows passwordless localhost navigation and blocks requests from other site
 
 	assert.equal((await fetch(origin, { headers: { 'sec-fetch-site': 'none' } })).status, 200)
 	assert.equal((await fetch(origin + route)).status, 200)
-	const foreignHost = await new Promise((resolve, reject) => {
-		get(origin + route, { headers: { host: 'untrusted.test' } }, (response) => {
+	const requestStatus = (path, options, body) => new Promise((resolve, reject) => {
+		const request = httpRequest(origin + path, options, (response) => {
 			response.resume()
 			resolve(response.statusCode)
 		}).on('error', reject)
+		request.end(body)
 	})
-	assert.equal(foreignHost, 403)
+	assert.equal(await requestStatus(route, { headers: { host: 'untrusted.test' } }), 403)
+	const proxyHost = 'files.example.test'
+	assert.equal(await requestStatus(route, { headers: { host: proxyHost } }), publicOrigin ? 200 : 403)
+	const navigationHeaders = { 'host': proxyHost, 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'document' }
+	assert.equal(await requestStatus('/', { headers: navigationHeaders }), publicOrigin ? 200 : 403)
+	assert.equal(await requestStatus(route, { headers: navigationHeaders }), 403)
+	assert.equal(await requestStatus('/v1/file', {
+		method: 'POST',
+		headers: { host: proxyHost, origin: `https://${proxyHost}` },
+	}, JSON.stringify({ path: '/DATA/proxied.txt' })), publicOrigin ? 200 : 403)
+	assert.equal(await requestStatus('/v1/file', {
+		method: 'POST',
+		headers: { host: proxyHost, origin: `http://${proxyHost}` },
+	}, JSON.stringify({ path: '/DATA/refused.txt' })), 403)
 	assert.equal((await fetch(origin + route, { headers: { 'sec-fetch-site': 'cross-site' } })).status, 403)
 	assert.equal((await fetch(`${origin}/v1/file`, {
 		method: 'POST',

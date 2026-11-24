@@ -7,8 +7,7 @@ services:
     ports:
       - '127.0.0.1:${FILES_PUBLISH_PORT:-8080}:8080'
     environment:
-      FILES_USERNAME: ${FILES_USERNAME:-files}
-      FILES_PASSWORD: ${FILES_PASSWORD:?Set FILES_PASSWORD in your shell or .env}
+      FILES_PUBLIC_ORIGIN: ${FILES_PUBLIC_ORIGIN:-}
       FILES_MAX_UPLOAD_BYTES: ${FILES_MAX_UPLOAD_BYTES:-10737418240}
     volumes:
       - type: bind

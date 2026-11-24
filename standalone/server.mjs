@@ -1,8 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
-import { createHash, timingSafeEqual } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { basename, extname, resolve, sep } from 'node:path'
 import process from 'node:process'
@@ -54,7 +53,7 @@ const previewTypes = {
 const octet = 'application/octet-stream'
 const jsonLimit = 16 * 1024 * 1024
 const editLimit = 8 * 1024 * 1024
-const digest = value => createHash('sha256').update(value).digest()
+const localHost = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i
 
 function json(response, status, data) {
 	response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -79,26 +78,19 @@ async function bodyOf(request) {
 	}
 }
 
-function sameOrigin(request) {
-	const { origin, host, 'sec-fetch-site': site } = request.headers
-	if (site && site !== 'same-origin')
+function isAllowedRequest(request, pathname, publicOrigin) {
+	const { host, origin, 'sec-fetch-site': site, 'sec-fetch-dest': destination } = request.headers
+	const authority = host?.toLowerCase() || ''
+	const usesPublicOrigin = authority === publicOrigin?.host
+	if (!usesPublicOrigin && !localHost.test(authority))
 		return false
-	if (!origin)
-		return true
-	try {
-		return new URL(origin).host === host
-	} catch {
-		return false
-	}
-}
-
-function isLocalRequest(request) {
-	const { host, origin, 'sec-fetch-site': site } = request.headers
-	if (!/^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i.test(host || ''))
-		return false
+	// A link or an authentication proxy can navigate to the app's entry page.
+	if (destination === 'document' && request.method === 'GET' && pathname === '/')
+		return !origin
 	if (site === 'none' && ['GET', 'HEAD'].includes(request.method))
 		return !origin
-	return sameOrigin(request)
+	const expectedOrigin = usesPublicOrigin ? publicOrigin.origin : `http://${authority}`
+	return (!site || site === 'same-origin') && (!origin || origin === expectedOrigin)
 }
 
 function attachment(name) {
@@ -205,19 +197,17 @@ function positiveInteger(value, label, fallback) {
 export async function createFilesServer({
 	assetsDirectory,
 	directory,
-	username = 'files',
-	password,
-	localNoAuth = false,
+	publicOrigin,
 	maxUploadBytes = 10 * 1024 ** 3,
 }) {
-	if (!localNoAuth && (!username || /[:\p{Cc}]/u.test(username) || !password || password.length < 12 || /\p{Cc}/u.test(password)))
-		throw new Error('Set a valid FILES_USERNAME and a FILES_PASSWORD of at least 12 characters.')
+	const publicUrl = publicOrigin && new URL(publicOrigin)
+	if (publicUrl && (publicUrl.protocol !== 'https:' || publicUrl.href !== `${publicUrl.origin}/`))
+		throw new Error('Set FILES_PUBLIC_ORIGIN to an HTTPS origin such as https://files.example.com.')
 	const assets = await realpath(assetsDirectory).catch(() => null)
 	if (!assets || !(await stat(resolve(assets, 'index.html')).catch(() => null))?.isFile())
 		throw new Error('Build the frontend with pnpm build:files before starting Files.')
 	const store = await openStorage(directory)
 	await store.trash()
-	const expected = localNoAuth ? null : digest(`${username}:${password}`)
 
 	return createServer({ requestTimeout: 3600000 }, async (request, response) => {
 		response.setHeader('Cache-Control', 'no-store')
@@ -231,18 +221,8 @@ export async function createFilesServer({
 			if (method === 'GET' && pathname === '/healthz')
 				return json(response, 200, 'ok')
 
-			if (localNoAuth) {
-				if (!isLocalRequest(request))
-					throw new RequestError(403, 'Open the localhost Files address directly.')
-			} else {
-				const token = /^Basic ([\w+/=]+)$/i.exec(request.headers.authorization || '')?.[1]
-				if (!token || !timingSafeEqual(digest(Buffer.from(token, 'base64')), expected)) {
-					response.setHeader('WWW-Authenticate', 'Basic realm="Files", charset="UTF-8"')
-					return json(response, 401, 'Sign in to Files.')
-				}
-				if (!['GET', 'HEAD'].includes(method) && !sameOrigin(request))
-					throw new RequestError(403, 'Open Files before changing its contents.')
-			}
+			if (!isAllowedRequest(request, pathname, publicUrl))
+				throw new RequestError(403, 'Open the configured Files address directly.')
 
 			const path = searchParams.get('path')
 			let data = null
@@ -345,18 +325,13 @@ export async function createFilesServer({
 async function start() {
 	const env = process.env
 	const host = env.FILES_HOST || '127.0.0.1'
-	const localNoAuth = env.FILES_LOCAL_NO_AUTH === '1'
 	const port = positiveInteger(env.FILES_PORT, 'FILES_PORT', 8080)
 	if (port > 65535)
 		throw new Error('FILES_PORT must be between 1 and 65535.')
 	const server = await createFilesServer({
 		assetsDirectory: fileURLToPath(new URL('../build/file-browser', import.meta.url)),
 		directory: env.FILES_DIRECTORY || './files-data',
-		username: env.FILES_USERNAME,
-		localNoAuth,
-		password: !localNoAuth && env.FILES_PASSWORD_FILE
-			? (await readFile(env.FILES_PASSWORD_FILE, 'utf8')).replace(/\r?\n$/, '')
-			: env.FILES_PASSWORD,
+		publicOrigin: env.FILES_PUBLIC_ORIGIN,
 		maxUploadBytes: positiveInteger(env.FILES_MAX_UPLOAD_BYTES, 'FILES_MAX_UPLOAD_BYTES', 10 * 1024 ** 3),
 	})
 	server.listen(port, host, () => console.log(`Files is listening on http://${host}:${port}`))
