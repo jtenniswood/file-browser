@@ -2,13 +2,19 @@ export const parentOf = path => path.replace(/\/[^/]*$/, '') || '/'
 
 export const SIDEBAR_ORDER_STORAGE_KEY = 'casaos-files-sidebar-order'
 
-export function savedSidebarOrder() {
+export function savedSidebarOrder(key = SIDEBAR_ORDER_STORAGE_KEY) {
 	try {
-		const order = JSON.parse(localStorage.getItem(SIDEBAR_ORDER_STORAGE_KEY))
+		const order = JSON.parse(localStorage.getItem(key))
 		return Array.isArray(order) ? order : []
 	} catch {
 		return []
 	}
+}
+
+export function saveSidebarOrder(key, order) {
+	try {
+		localStorage.setItem(key, JSON.stringify(order))
+	} catch {}
 }
 
 export function orderSidebarItems(folders, starred, order) {
@@ -16,6 +22,10 @@ export function orderSidebarItems(folders, starred, order) {
 	for (const item of starred) {
 		entries.set(item.path, { ...(entries.get(item.path) || item), starred: true })
 	}
+	return orderSidebarPaths(entries, order)
+}
+
+export function orderSidebarPaths(entries, order) {
 	const ordered = []
 	for (const path of order) {
 		if (entries.has(path)) {

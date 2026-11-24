@@ -32,6 +32,8 @@
 								<div class="list-container scrollbars-light pt-0 is-flex-grow-1">
 									<tree-list :auto-load="true" :is-active="pageType == `file`"
 										:path="rootPath"></tree-list>
+									<standalone-mount-list v-if="$standaloneFiles" :is-active="pageType === 'file'"
+										:paths="mountPoints" />
 								</div>
 							</div>
 							<!-- Files End -->
@@ -265,6 +267,7 @@ import escape from 'lodash/escape'
 
 import TreeList from './sidebar/TreeList.vue'
 import MountList from './sidebar/MountList.vue'
+import StandaloneMountList from './sidebar/StandaloneMountList.vue'
 import ShareEntryButton from './shared/ShareEntryButton.vue'
 import ShareListPage from './shared/ShareListPage.vue'
 import TrashEntryButton from './trash/TrashEntryButton.vue'
@@ -338,6 +341,7 @@ export default {
 		TrashEntryButton,
 		TrashPage: defineAsyncComponent(() => import('./trash/TrashPage.vue')),
 		MountList,
+		StandaloneMountList,
 		MountActionButton,
 		// Drop
 		DropPage: defineAsyncComponent(() => import('./drop/DropPage.vue')),
@@ -359,6 +363,7 @@ export default {
 			currentItem: null,
 			rootPath: '/DATA',
 			fileRootReady: false,
+			mountPoints: ['/DATA'],
 			// the folders given to an account and the ones it may write (CasaOS#168); null for the owner
 			accountFolders: null,
 			currentPath: '',
@@ -631,8 +636,12 @@ export default {
 		async resolveFileRoot() {
 			try {
 				const res = await withTimeout(this.$api.file.getRoots(), FILE_ROOTS_TIMEOUT_MS)
-				this.accountFolders = accountFoldersFrom(res?.data?.data)
-				this.rootPath = this.accountFolders ? (this.accountFolders.folders[0] || '/') : fileRootFrom(res?.data?.data?.roots)
+				const data = res?.data?.data
+				this.accountFolders = accountFoldersFrom(data)
+				this.rootPath = this.accountFolders ? (this.accountFolders.folders[0] || '/') : fileRootFrom(data?.roots)
+				if (this.$standaloneFiles) {
+					this.mountPoints = data?.mount_points ?? [this.rootPath]
+				}
 			} catch {
 				this.rootPath = '/DATA'
 			}

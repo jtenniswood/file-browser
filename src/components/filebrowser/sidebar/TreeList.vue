@@ -1,5 +1,6 @@
 <template>
-	<draggable v-model="sidebarItems" :animation="180" :delay="160" :delay-on-touch-only="true"
+	<h4 v-if="$standaloneFiles && sidebarItems.length" class="sidebar-group-title">{{ $t('Pinned') }}</h4>
+	<draggable v-if="!$standaloneFiles || sidebarItems.length" v-model="sidebarItems" :animation="180" :delay="160" :delay-on-touch-only="true"
 		:prevent-on-filter="false" class="ul" filter=".sidebar-remove" ghost-class="sidebar-drag-ghost" item-key="path">
 		<template #item="{ element: item }">
 			<tree-list-item :hide-icon-until-hover="item.starred" :icon-label="item.starred ? $t('Remove from Starred') : ''"
@@ -14,7 +15,7 @@ import has from 'lodash/has'
 import draggable from 'vuedraggable'
 import { accountFolderItems, homeFolders } from '../fileRoot.js'
 import TreeListItem from './TreeListItem.vue'
-import { SIDEBAR_ORDER_STORAGE_KEY, checkStarred, orderSidebarItems, savedSidebarOrder } from './starred.js'
+import { SIDEBAR_ORDER_STORAGE_KEY, checkStarred, orderSidebarItems, saveSidebarOrder, savedSidebarOrder } from './starred.js'
 import { mixin } from '@/mixins/mixin'
 import events from '@/events/events'
 
@@ -68,14 +69,16 @@ export default {
 		},
 		sidebarItems: {
 			get() {
+				if (this.$standaloneFiles) {
+					const isPin = item => !this.filePanel.mountPoints.includes(item.path)
+					return orderSidebarItems([], this.starredList.filter(isPin), this.sidebarOrder)
+				}
 				const folders = this.accountItems || [...this.rootDataList, ...this.dataList]
 				return orderSidebarItems(folders, this.starredList, this.sidebarOrder)
 			},
 			set(items) {
 				this.sidebarOrder = items.map(item => item.path)
-				try {
-					localStorage.setItem(SIDEBAR_ORDER_STORAGE_KEY, JSON.stringify(this.sidebarOrder))
-				} catch {}
+				saveSidebarOrder(SIDEBAR_ORDER_STORAGE_KEY, this.sidebarOrder)
 			},
 		},
 	},
