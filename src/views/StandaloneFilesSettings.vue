@@ -5,7 +5,7 @@
 			<button class="delete is-medium" type="button" :aria-label="$t('Close')" autofocus @click="emit('close')"></button>
 		</header>
 
-		<b-tabs v-model="tab" :animated="false" class="settings-tabs" size="is-small">
+		<b-tabs v-model="tab" :animated="false" :vertical="verticalTabs" class="settings-tabs" size="is-small">
 			<b-tab-item label="Preferences" value="preferences">
 				<div class="settings-row preference-row">
 					<h2 id="appearance-title" class="setting_title">{{ $t('Appearance') }}</h2>
@@ -124,6 +124,7 @@
 </template>
 
 <script setup>
+import { useMediaQuery } from '@vueuse/core'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useStore } from 'vuex'
 import TwoFactorPanel from '@/components/account/TwoFactorPanel.vue'
@@ -136,6 +137,7 @@ const store = useStore()
 const user = computed(() => store.state.user)
 const isAdmin = computed(() => user.value.role === 'admin')
 const tab = ref('preferences')
+const verticalTabs = useMediaQuery('(min-width: 40rem)')
 const theme = ref(readThemePreference(undefined, 'light'))
 const themeOptions = [
 	{ value: 'light', label: 'Light' },
@@ -254,7 +256,7 @@ function factorChanged(value) {
 	--settings-inset: clamp(1rem, 3vw, 1.5rem);
 	--settings-top: min(12dvh, 5rem);
 	inset: 0;
-	width: min(43rem, calc(100% - 2rem));
+	width: min(49rem, calc(100% - 2rem));
 	max-width: none;
 	max-height: calc(100dvh - var(--settings-top) - 1rem);
 	margin: var(--settings-top) auto auto;
@@ -318,8 +320,45 @@ function factorChanged(value) {
 	color: var(--casa-text);
 }
 
+.settings-tabs.is-vertical {
+	flex-direction: row;
+	flex-wrap: nowrap;
+	border-top: 1px solid var(--casa-divider);
+}
+
+.settings-tabs.is-vertical :deep(.tabs) {
+	width: 9.5rem;
+	overflow-y: auto;
+	border-inline-end: 1px solid var(--casa-divider);
+	background: var(--casa-surface-sunken);
+}
+
+.settings-tabs.is-vertical :deep(.tabs ul) {
+	gap: 0.25rem;
+	padding: 0.625rem;
+	border-bottom: 0;
+}
+
+.settings-tabs.is-vertical :deep(.tabs a) {
+	margin: 0;
+	padding: 0.625rem;
+	border-bottom: 0 !important;
+	border-radius: 0.375rem;
+	font-size: 0.875rem;
+}
+
+.settings-tabs.is-vertical :deep(.tabs a:hover) {
+	background: var(--casa-hover-sunken);
+}
+
+.settings-tabs.is-vertical :deep(.tabs .is-active a) {
+	background: var(--casa-selected);
+	font-weight: 600;
+}
+
 .settings-tabs :deep(.tab-content) {
 	display: flex;
+	min-width: 0;
 	min-height: 0;
 	padding: 0;
 }
