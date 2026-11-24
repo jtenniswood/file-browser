@@ -1,6 +1,6 @@
 # File Browser
 
-File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, and edit files, as well as move, copy, star, and trash them. The interface comes from [ReCasaOS Files](https://github.com/ReCasaOS/CasaOS-UI).
+File Browser is a self-hosted web app for managing a folder on your Docker host. You can browse, upload, download, preview, and edit files, as well as move, copy, star, and trash them.
 
 ## Install with Docker
 
