@@ -1,8 +1,10 @@
 <template>
 	<div class="li" @keydown.enter.self.prevent="open">
-		<div v-if="item.visible" :class="{ 'active': isActived, 'is-unavailable': item.unavailable }"
+		<div v-if="item.visible" :class="{ 'active': isActived, 'is-unavailable': item.unavailable, 'file-move-target': filePanel.moveTarget === item.path }"
 			:title="item.unavailable ? $t('Not available: it may have been moved or deleted') : null"
-			class="is-flex list-item new-list-item" @click="open">
+			class="is-flex list-item new-list-item" @click="open"
+			@dragleave="filePanel.leaveMoveTarget($event, item.path)" @dragover="filePanel.showMoveTarget($event, item)"
+			@drop="filePanel.dropFiles($event, item)">
 			<div class="cover mr-2 is-flex-shrink-0 is-relative is-flex is-align-items-center">
 				<template v-if="item.icon !== 'danger'">
 					<img v-if="folderIcon" :src="folderIcon" width="24" height="24" alt="">

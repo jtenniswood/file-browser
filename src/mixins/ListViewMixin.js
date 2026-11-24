@@ -5,6 +5,7 @@ import VueBreakpointMixin from '@/mixins/breakpoint'
 
 export default {
 	mixins: [VueBreakpointMixin],
+	inject: { filePanel: { default: null } },
 	props: {
 		listData: Array,
 		isLoading: Boolean,

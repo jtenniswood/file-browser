@@ -73,13 +73,14 @@ function folderIdentity({ dev, ino, birthtimeMs }) {
 	return `${dev}:${ino}:${birthtimeMs}`
 }
 
-async function inspectTree(path) {
+async function inspectTree(path, visit) {
 	const stat = await lstat(path)
 	if (!isSupported(stat))
 		throw new RequestError(403, 'This folder contains a symbolic link or special file.')
 	if (stat.isDirectory()) {
+		visit?.(path, stat)
 		for (const name of await readdir(path))
-			await inspectTree(join(path, name))
+			await inspectTree(join(path, name), visit)
 	}
 }
 
@@ -201,13 +202,21 @@ export async function openStorage(directory) {
 		return result
 	}
 
-	async function staged(operation) {
-		const directory = await mkdtemp(join(state, 'temp-'))
+	async function staged(operation, prefix = join(state, 'temp-')) {
+		const directory = await mkdtemp(prefix)
 		try {
 			return await operation(join(directory, 'data'))
 		} finally {
 			await rm(directory, { recursive: true, force: true })
 		}
+	}
+
+	async function saveFolderIcons(updated) {
+		await staged(async (temporary) => {
+			await writeFile(temporary, JSON.stringify(updated), { mode: 0o600 })
+			await rename(temporary, folderIconsFile)
+		})
+		folderIcons = updated
 	}
 
 	async function upload(path, relativePath, request, maxBytes) {
@@ -252,6 +261,46 @@ export async function openStorage(directory) {
 		})
 	}
 
+	async function moveEntry(target, newPath) {
+		try {
+			await rename(target, newPath)
+			return
+		} catch (error) {
+			if (error.code !== 'EXDEV')
+				throw error
+		}
+
+		const mountInfo = await readFile('/proc/self/mountinfo', 'utf8').catch(() => '')
+		const sourcePath = rootPath + target.slice(root.length)
+		if (mountedPaths(mountInfo, root).some(path => path === sourcePath || path.startsWith(`${sourcePath}/`)))
+			throw new RequestError(409, 'A mount point or a folder containing one cannot be moved.')
+
+		await access(dirname(target), constants.W_OK | constants.X_OK)
+		const icons = new Map()
+		await inspectTree(target, (path, stat) => {
+			const identity = folderIdentity(stat)
+			if (folderIcons[identity])
+				icons.set(relative(target, path), identity)
+		})
+		// Stage on the destination filesystem so the final rename publishes the complete copy.
+		await staged(async (temporary) => {
+			await cp(target, temporary, { recursive: true, force: false, errorOnExist: true, preserveTimestamps: true })
+			if (await optionalStat(newPath))
+				throw new RequestError(409, 'A file or folder already has that name.')
+			await rename(temporary, newPath)
+		}, join(dirname(newPath), '.files-move-'))
+		if (icons.size) {
+			const updated = { ...folderIcons }
+			for (const [path, identity] of icons) {
+				const moved = await lstat(join(newPath, path))
+				updated[folderIdentity(moved)] = folderIcons[identity]
+				delete updated[identity]
+			}
+			await saveFolderIcons(updated)
+		}
+		await rm(target, { recursive: true })
+	}
+
 	async function batchTask({ type, item, to }) {
 		if (!['copy', 'move'].includes(type) || !Array.isArray(item) || !item.length)
 			throw new RequestError(400, 'Choose files to copy or move.')
@@ -270,7 +319,7 @@ export async function openStorage(directory) {
 		}
 		for (const { target, newPath } of entries) {
 			if (type === 'move') {
-				await rename(target, newPath)
+				await moveEntry(target, newPath)
 			} else {
 				await inspectTree(target)
 				await staged(async (temporary) => {
@@ -331,11 +380,7 @@ export async function openStorage(directory) {
 				delete updated[key]
 			else
 				updated[key] = icon
-			await staged(async (temporary) => {
-				await writeFile(temporary, JSON.stringify(updated), { mode: 0o600 })
-				await rename(temporary, folderIconsFile)
-			})
-			folderIcons = updated
+			await saveFolderIcons(updated)
 		}),
 		rename: (oldPath, newPath) => change(async () => {
 			const { target } = await locate(oldPath, { allowRoot: false })
