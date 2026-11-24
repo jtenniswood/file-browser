@@ -14,6 +14,7 @@ function storedUser() {
 }
 
 export const FILE_SORT_STORAGE_KEY = 'casaos-filebrowser-sort'
+export const SHOW_HIDDEN_FILES_STORAGE_KEY = 'casaos-filebrowser-show-hidden-files'
 
 // How Files sorts, as this browser last left it: name A to Z when nothing usable is stored.
 export function savedFileSort() {
@@ -23,6 +24,14 @@ export function savedFileSort() {
 			return { sort, order }
 	} catch {}
 	return { sort: 'name', order: 'asc' }
+}
+
+function savedHiddenFilesPreference() {
+	try {
+		return localStorage.getItem(SHOW_HIDDEN_FILES_STORAGE_KEY) === 'true'
+	} catch {
+		return false
+	}
 }
 
 export function emptyUser() {
@@ -77,6 +86,7 @@ const state = {
 	operateObject: null,
 	currentPath: '',
 	isViewGird: true,
+	showHiddenFiles: savedHiddenFilesPreference(),
 	...savedFileSort(),
 
 	// Wallpaper

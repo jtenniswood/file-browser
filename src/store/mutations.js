@@ -1,4 +1,4 @@
-import { FILE_SORT_STORAGE_KEY, emptyUser } from './state'
+import { FILE_SORT_STORAGE_KEY, SHOW_HIDDEN_FILES_STORAGE_KEY, emptyUser } from './state'
 import {
 	APP_LAUNCH_EXCEPTIONS_KEY,
 	APP_LAUNCH_IFRAME_KEY,
@@ -122,6 +122,13 @@ const mutations = {
 
 	SET_IS_VIEW_GRID(state, val) {
 		state.isViewGird = val
+	},
+
+	SET_SHOW_HIDDEN_FILES(state, show) {
+		state.showHiddenFiles = show
+		try {
+			localStorage.setItem(SHOW_HIDDEN_FILES_STORAGE_KEY, String(show))
+		} catch {}
 	},
 
 	SET_FILE_SORT(state, { sort, order }) {

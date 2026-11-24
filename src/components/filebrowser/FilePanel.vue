@@ -67,19 +67,12 @@
 								@open="showSharedList"></share-entry-button>
 							<trash-entry-button :active="pageType == `trash`"
 								@open="showTrash"></trash-entry-button>
-							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="files-theme is-flex is-align-items-center">
-								<b-icon aria-hidden="true" icon="cog-outline" size="is-small" /><span>{{ $t('Settings') }}</span>
+							<RouterLink v-if="$standaloneFiles" :to="{ name: 'settings', query: $route.query }" class="is-flex list-item new-list-item">
+								<div class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
+									<b-icon aria-hidden="true" icon="settings-outline" pack="casa" />
+								</div>
+								<div><span>{{ $t('Settings') }}</span></div>
 							</RouterLink>
-							<label v-if="$standaloneFiles" class="files-theme is-flex is-align-items-center is-justify-content-space-between">
-								<span>{{ $t('Appearance') }}</span>
-								<span class="select is-small">
-									<select v-model="theme" @change="setThemePreference(theme)">
-										<option value="light">{{ $t('Light') }}</option>
-										<option value="dark">{{ $t('Dark') }}</option>
-										<option value="system">{{ $t('Auto') }}</option>
-									</select>
-								</span>
-							</label>
 						</div>
 						<!-- Bottom Action End -->
 					</div>
@@ -148,7 +141,7 @@
 									</b-field>
 								</div>
 								<div class="view-btns is-flex-shrink-0">
-									<b-tooltip :label="showHiddenFilesLabel" position="is-left" type="is-dark">
+									<b-tooltip v-if="!$standaloneFiles" :label="showHiddenFilesLabel" position="is-left" type="is-dark">
 										<p :aria-label="showHiddenFilesLabel" :aria-pressed="showHiddenFiles"
 											class="is-clickable none-line-height mr-3" role="button" tabindex="0"
 											@keydown.enter.prevent="toggleHiddenFiles" @keydown.space.prevent="toggleHiddenFiles"
@@ -305,13 +298,10 @@ import MergeStorages from '@/components/Storage/MergeStorages.vue'
 
 // Drop
 import events from '@/events/events'
-import { readThemePreference, setThemePreference } from '@/mixins/app/themePreference'
 import VueBreakpointMixin from '@/mixins/breakpoint'
 import { filterHiddenFiles, sortFiles } from '@/mixins/file_utils'
 import { mixin } from '@/mixins/mixin'
 import NewTabButton from '@/components/basicComponents/NewTabButton.vue'
-
-const SHOW_HIDDEN_FILES_STORAGE_KEY = 'casaos-filebrowser-show-hidden-files'
 
 export default {
 	name: 'file-panel',
@@ -356,7 +346,6 @@ export default {
 	},
 	data() {
 		return {
-			theme: readThemePreference(undefined, 'light'),
 			isCreated: false,
 			isUnmounted: false,
 			isLoading: true,
@@ -375,7 +364,6 @@ export default {
 			currentPath: '',
 			currentPathName: '',
 			isViewGird: true,
-			showHiddenFiles: localStorage.getItem(SHOW_HIDDEN_FILES_STORAGE_KEY) === 'true',
 			sortOptions: [
 				{ sort: 'name', text: 'File name' },
 				{ sort: 'date', text: 'Date Modified' },
@@ -460,6 +448,9 @@ export default {
 				? 'grid_view'
 				: 'format_list_bulleted'
 		},
+		showHiddenFiles() {
+			return this.$store.state.showHiddenFiles
+		},
 		hiddenFilesIcon() {
 			return this.showHiddenFiles ? 'visibility_off' : 'visibility'
 		},
@@ -482,6 +473,11 @@ export default {
 		},
 	},
 	watch: {
+		showHiddenFiles() {
+			this.clearSelection()
+			this.updateVisibleList()
+			this.handelListChange(this.listData)
+		},
 		'$store.state.access_token': {
 			handler(val) {
 				this.options.headers.Authorization = val
@@ -550,7 +546,6 @@ export default {
 	},
 
 	methods: {
-		setThemePreference,
 		/*************************************************
 		 * PART 0  Self
 		 **************************************************/
@@ -770,11 +765,7 @@ export default {
 		 * @return {*}
 		 */
 		toggleHiddenFiles() {
-			this.showHiddenFiles = !this.showHiddenFiles
-			localStorage.setItem(SHOW_HIDDEN_FILES_STORAGE_KEY, String(this.showHiddenFiles))
-			this.clearSelection()
-			this.updateVisibleList()
-			this.handelListChange(this.listData)
+			this.$store.commit('SET_SHOW_HIDDEN_FILES', !this.showHiddenFiles)
 		},
 
 		/**
@@ -1323,13 +1314,6 @@ export default {
 	white-space: nowrap;
 	vertical-align: middle;
 	direction: ltr;
-}
-
-.files-theme {
-	gap: 0.5rem;
-	margin-top: 0.25rem;
-	padding: 0.375rem 0.75rem;
-	color: var(--casa-text-secondary);
 }
 
 .full-screen {
