@@ -73,6 +73,13 @@
 								</div>
 								<div><span>{{ $t('Settings') }}</span></div>
 							</RouterLink>
+							<button v-if="$standaloneFiles" class="is-flex list-item new-list-item files-sign-out"
+								type="button" :disabled="isSigningOut" @click="signOut">
+								<span class="cover mr-2 is-flex-shrink-0 is-flex is-align-items-center">
+									<b-icon aria-hidden="true" icon="exit-app-outline" pack="casa" />
+								</span>
+								<span>Sign out</span>
+							</button>
 						</div>
 						<!-- Bottom Action End -->
 					</div>
@@ -302,6 +309,7 @@ import VueBreakpointMixin from '@/mixins/breakpoint'
 import { filterHiddenFiles, sortFiles } from '@/mixins/file_utils'
 import { mixin } from '@/mixins/mixin'
 import NewTabButton from '@/components/basicComponents/NewTabButton.vue'
+import { filesAccountRequest, filesSessionExpired } from '@/service/filesAccounts'
 
 const fileMoveDragType = 'application/x-files-move'
 
@@ -356,6 +364,7 @@ export default {
 			moveTarget: null,
 			isMovingFiles: false,
 			isPasting: false,
+			isSigningOut: false,
 			isShowDetial: false,
 			isSideBarOpen: false,
 			pageType: 'file',
@@ -550,6 +559,19 @@ export default {
 	},
 
 	methods: {
+		async signOut() {
+			this.isSigningOut = true
+			try {
+				await filesAccountRequest('logout', { method: 'POST' })
+				window.dispatchEvent(new Event(filesSessionExpired))
+				await this.$router.replace({ name: 'files' })
+			} catch (error) {
+				this.$buefy.toast.open({ message: escape(error.message), type: 'is-danger' })
+			} finally {
+				this.isSigningOut = false
+			}
+		},
+
 		/*************************************************
 		 * PART 0  Self
 		 **************************************************/
@@ -1411,6 +1433,13 @@ export default {
 	white-space: nowrap;
 	vertical-align: middle;
 	direction: ltr;
+}
+
+.files-sign-out {
+	width: 100%;
+	background: transparent;
+	border: 0;
+	font: inherit;
 }
 
 .full-screen {

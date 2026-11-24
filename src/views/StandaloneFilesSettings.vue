@@ -1,12 +1,9 @@
 <template>
 	<main class="files-account-page">
 		<div class="files-settings">
-			<header class="settings-row">
-				<div>
-					<RouterLink :to="{ name: 'files', query: $route.query }">← Back to files</RouterLink>
-					<h1 class="title is-3 mb-0 mt-3">Settings</h1>
-				</div>
-				<button class="button" type="button" :disabled="busy" @click="signOut">Sign out</button>
+			<header>
+				<RouterLink :to="{ name: 'files', query: $route.query }">← Back to files</RouterLink>
+				<h1 class="title is-3 mb-0 mt-3">Settings</h1>
 			</header>
 			<p v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</p>
 			<p v-if="notice" class="notification is-success is-light" role="status">{{ notice }}</p>
@@ -118,14 +115,12 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import TwoFactorPanel from '@/components/account/TwoFactorPanel.vue'
 import { readThemePreference, setThemePreference } from '@/mixins/app/themePreference'
-import { filesAccountRequest, filesSessionExpired } from '@/service/filesAccounts'
+import { filesAccountRequest } from '@/service/filesAccounts'
 
 const store = useStore()
-const router = useRouter()
 const user = computed(() => store.state.user)
 const isAdmin = computed(() => user.value.role === 'admin')
 const theme = ref(readThemePreference(undefined, 'light'))
@@ -231,14 +226,6 @@ function factorChanged(value) {
 	const ownAccount = users.value.find(account => account.username === user.value.username)
 	if (ownAccount)
 		ownAccount.totp_enabled = value
-}
-
-function signOut() {
-	return run(async () => {
-		await filesAccountRequest('logout', { method: 'POST' })
-		window.dispatchEvent(new Event(filesSessionExpired))
-		await router.replace({ name: 'files' })
-	})
 }
 </script>
 
