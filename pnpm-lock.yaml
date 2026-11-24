@@ -310,8 +310,8 @@ importers:
         specifier: ^1.5.0
         version: 1.5.0(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       terser-webpack-plugin:
-        specifier: 5.3.10
-        version: 5.3.10(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
+        specifier: 5.6.1
+        version: 5.6.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       typescript:
         specifier: ^5.7.2
         version: 5.7.2
@@ -1305,10 +1305,6 @@ packages:
   '@jridgewell/remapping@2.3.5':
     resolution: {integrity: sha512-LI9u/+laYG4Ds1TDKSJW2YPrIlcVYOwi2fUC6xB43lueCjgxV4lffOCZCtYFiH6TNOX+tQKXx97T4IKHbhyHEQ==}
 
-  '@jridgewell/resolve-uri@3.1.2':
-    resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
-    engines: {node: '>=6.0.0'}
-
   '@jridgewell/resolve-uri@3.1.3':
     resolution: {integrity: sha512-lhTtjtoEArWBjismtfS761S9Hlyn+nIZqOZVYoZ1Xn82PMNMVnk+jj/NhC4fAXGTs7ydONcJiR5vyQBTMDu27g==}
     engines: {node: '>=6.0.0'}
@@ -1320,17 +1316,8 @@ packages:
   '@jridgewell/source-map@0.3.11':
     resolution: {integrity: sha512-ZMp1V8ZFcPG5dIWnQLr3NSI1MiCU7UETdS/A0G8V/XWHvJv3ZsFqutJn1Y5RPmAPX6F3BiE397OqveU/9NCuIA==}
 
-  '@jridgewell/source-map@0.3.6':
-    resolution: {integrity: sha512-1ZJTZebgqllO79ue2bm3rIGud/bOe0pP5BjSRCRxxYkEZS8STV7zN84UBbiYu7jy+eCKSnVIUgoWWE/tt+shMQ==}
-
-  '@jridgewell/sourcemap-codec@1.5.0':
-    resolution: {integrity: sha512-gv3ZRaISU3fjPAgNsriBRqGWQL6quFx04YMPW/zD8XMLsU32mhCCbfbO6KZFLjvYpCZ8zyDEgqsgf+PwPaM7GQ==}
-
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
-
-  '@jridgewell/trace-mapping@0.3.25':
-    resolution: {integrity: sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ==}
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
@@ -6735,26 +6722,48 @@ packages:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
     engines: {node: '>=6'}
 
-  terser-webpack-plugin@5.3.10:
-    resolution: {integrity: sha512-BKFPWlPDndPs+NGGCr1U59t0XScL5317Y0UReNrHaw9/FwhPENlq6bfgs+4yPfyP51vqC1bQ4rp1EfXW5ZSH9w==}
+  terser-webpack-plugin@5.6.1:
+    resolution: {integrity: sha512-201R5j+sJpK8nFWwKVyNfZot8FaJbLZDq5evriVzbV1wDtSXDjRUDRfJzHpAaxFDMEhsZL1QkeqM61wgsS3KaQ==}
     engines: {node: '>= 10.13.0'}
     peerDependencies:
+      '@minify-html/node': '*'
       '@swc/core': '*'
+      '@swc/css': '*'
+      '@swc/html': '*'
+      clean-css: '*'
+      cssnano: '*'
+      csso: '*'
       esbuild: '*'
+      html-minifier-terser: '*'
+      lightningcss: '*'
+      postcss: '*'
       uglify-js: '*'
       webpack: ^5.1.0
     peerDependenciesMeta:
+      '@minify-html/node':
+        optional: true
       '@swc/core':
+        optional: true
+      '@swc/css':
+        optional: true
+      '@swc/html':
+        optional: true
+      clean-css:
+        optional: true
+      cssnano:
+        optional: true
+      csso:
         optional: true
       esbuild:
         optional: true
+      html-minifier-terser:
+        optional: true
+      lightningcss:
+        optional: true
+      postcss:
+        optional: true
       uglify-js:
         optional: true
-
-  terser@5.36.0:
-    resolution: {integrity: sha512-IYV9eNMuFAV4THUspIRXkLakHnV6XO7FEdtKjf/mDyrnqUg9LnlOn6/RwRvM9SZjR4GUq8Nk8zj67FzVARr74w==}
-    engines: {node: '>=10'}
-    hasBin: true
 
   terser@5.51.2:
     resolution: {integrity: sha512-bWnjSNscmuI+GJze6ZupnHP8G/cTcsJF+bXCeQknk2SHQsgbNJnLrqiH9jZ2W4STPVXH2mDKKRX3iwPhc9Cn/Q==}
@@ -8696,8 +8705,6 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
 
-  '@jridgewell/resolve-uri@3.1.2': {}
-
   '@jridgewell/resolve-uri@3.1.3': {}
 
   '@jridgewell/set-array@1.2.1': {}
@@ -8707,19 +8714,7 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
 
-  '@jridgewell/source-map@0.3.6':
-    dependencies:
-      '@jridgewell/gen-mapping': 0.3.13
-      '@jridgewell/trace-mapping': 0.3.25
-
-  '@jridgewell/sourcemap-codec@1.5.0': {}
-
   '@jridgewell/sourcemap-codec@1.6.0': {}
-
-  '@jridgewell/trace-mapping@0.3.25':
-    dependencies:
-      '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.0
 
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
@@ -9751,7 +9746,7 @@ snapshots:
       postcss-loader: 6.2.1(postcss@8.5.33)(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       progress-webpack-plugin: 1.0.16(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       ssri: 8.0.1
-      terser-webpack-plugin: 5.3.10(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
+      terser-webpack-plugin: 5.6.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       thread-loader: 3.0.4(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       vue-loader: 17.4.2(@vue/compiler-sfc@3.5.46)(vue@3.5.46(typescript@5.7.2))(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
       vue-style-loader: 4.1.3
@@ -12639,7 +12634,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.10.1
+      '@types/node': 26.6.6
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -12758,7 +12753,7 @@ snapshots:
 
   jsonc-eslint-parser@2.4.0:
     dependencies:
-      acorn: 8.14.0
+      acorn: 8.19.0
       eslint-visitor-keys: 3.4.3
       espree: 9.6.1
       semver: 7.8.6
@@ -14630,21 +14625,16 @@ snapshots:
 
   tapable@2.3.3: {}
 
-  terser-webpack-plugin@5.3.10(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1))):
+  terser-webpack-plugin@5.6.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1))):
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
-      schema-utils: 3.3.0
-      serialize-javascript: 7.1.4
-      terser: 5.36.0
+      schema-utils: 4.8.5(webpack@5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1)))
+      terser: 5.51.2
       webpack: 5.111.1(cssnano@5.1.15(postcss@8.5.33))(postcss@8.5.33)(webpack-cli@5.1.4(webpack-dev-server@5.2.7)(webpack@5.111.1))
-
-  terser@5.36.0:
-    dependencies:
-      '@jridgewell/source-map': 0.3.6
-      acorn: 8.14.0
-      commander: 2.20.3
-      source-map-support: 0.5.21
+    optionalDependencies:
+      cssnano: 5.1.15(postcss@8.5.33)
+      postcss: 8.5.33
 
   terser@5.51.2:
     dependencies:
