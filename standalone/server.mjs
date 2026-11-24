@@ -211,6 +211,7 @@ function positiveInteger(value, label, fallback) {
 export async function createFilesServer({
 	assetsDirectory,
 	directory,
+	mountPoints,
 	directAddress,
 	publicOrigin,
 	setupCode,
@@ -227,7 +228,7 @@ export async function createFilesServer({
 	const assets = await realpath(assetsDirectory).catch(() => null)
 	if (!assets || !(await stat(resolve(assets, 'index.html')).catch(() => null))?.isFile())
 		throw new Error('Build the frontend with pnpm build:files before starting Files.')
-	const store = await openStorage(directory)
+	const store = await openStorage(directory, mountPoints)
 	const accounts = await openAccounts(store.state, setupCode)
 	if (setupCode && accounts.setupRequired())
 		onSetupCode?.(setupCode)
@@ -381,6 +382,7 @@ async function start() {
 	const server = await createFilesServer({
 		assetsDirectory: fileURLToPath(new URL('../build/file-browser', import.meta.url)),
 		directory,
+		mountPoints: env.FILES_MOUNT_POINTS === undefined ? undefined : JSON.parse(env.FILES_MOUNT_POINTS),
 		readSambaShares,
 		directAddress,
 		publicOrigin: env.FILES_PUBLIC_ORIGIN,

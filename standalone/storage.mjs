@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer'
 import { constants, createWriteStream } from 'node:fs'
 import { access, chmod, cp, link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { basename, dirname, join, relative, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
@@ -48,13 +48,15 @@ function isSupported(stat) {
 	return stat.isFile() || stat.isDirectory()
 }
 
-export function mountedPaths(mountInfo, root) {
+export function mountedPaths(mountInfo, root, mountPoints) {
 	const prefix = root + sep
 	const paths = new Set()
 	for (const line of mountInfo.split('\n')) {
 		const mountPoint = line.split(' ')[4]?.replace(/\\(040|011|012|134)/g, (_, octal) => String.fromCharCode(Number.parseInt(octal, 8)))
-		if (mountPoint?.startsWith(prefix))
+		if (mountPoint?.startsWith(prefix) && (mountPoints === undefined || mountPoints.includes(mountPoint)))
 			paths.add(rootPath + mountPoint.slice(root.length))
+		else if (mountPoint === root && mountPoints !== undefined)
+			paths.add(rootPath)
 	}
 	return [...paths].sort()
 }
@@ -96,7 +98,9 @@ async function inspectTree(path, visit) {
 	}
 }
 
-export async function openStorage(directory) {
+export async function openStorage(directory, mountPoints) {
+	if (mountPoints !== undefined && (!Array.isArray(mountPoints) || mountPoints.some(path => typeof path !== 'string' || !isAbsolute(path))))
+		throw new Error('FILES_MOUNT_POINTS must be a JSON array of absolute container paths.')
 	await mkdir(directory, { recursive: true, mode: 0o700 })
 	const root = await realpath(directory)
 	if (root === sep)
@@ -176,10 +180,10 @@ export async function openStorage(directory) {
 	}
 
 	async function mounts() {
-		// Linux mountinfo reports directory and bind mounts in this process's namespace.
+		// Docker's root bind can inherit host mounts. Only list additional destinations declared by the operator.
 		const mountInfo = await readFile('/proc/self/mountinfo', 'utf8').catch(() => '')
-		const paths = [rootPath]
-		for (const path of mountedPaths(mountInfo, root)) {
+		const paths = mountPoints === undefined ? [rootPath] : []
+		for (const path of mountedPaths(mountInfo, root, mountPoints)) {
 			try {
 				const { target, stat } = await locate(path)
 				if (stat.isDirectory()) {

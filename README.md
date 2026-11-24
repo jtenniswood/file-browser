@@ -25,12 +25,15 @@ Set these options in `.env` beside `compose.yaml`, then run `docker compose up -
 | Variable | What it controls | Default |
 | --- | --- | --- |
 | `FILES_DIRECTORY` | Host folder to manage. Use an existing absolute path to select a different folder. | `./files-data` |
+| `FILES_MOUNT_POINTS` | JSON array of additional Docker mount destinations to show in the sidebar. | `[]` |
 | `FILES_PUBLISH_PORT` | Port on the Docker host. | `8080` |
 | `FILES_BIND_ADDRESS` | IP address on the Docker host where Files is available. | `127.0.0.1` |
 | `FILES_PUBLIC_ORIGIN` | Optional HTTPS address for a reverse proxy, such as `https://files.example.com`. | Unset |
 | `FILES_UID`, `FILES_GID` | Numeric user and group the container runs as. The install commands set them to your user and group. | `1000` |
 | `FILES_MAX_UPLOAD_BYTES` | Maximum upload size per file. | `10737418240` (10 GiB) |
 | `FILES_IMAGE` | Image tag to run. Set it to a `sha-…` tag to pin a specific build. | `ghcr.io/jtenniswood/files:latest` |
+
+With the default Docker setup, **Mount points** shows only **DATA**. Add any extra folder mounts under `/data` in Compose, then list their container destinations in `FILES_MOUNT_POINTS`. For example, for a mount at `/data/Archive`, set `FILES_MOUNT_POINTS='["/data/Archive"]'` in `.env`. Ordinary folders and mounts inherited from the host remain browsable inside **DATA**.
 
 The container user needs permission to read and write the host folder. If the service fails to start, run `docker compose logs files` and check that the folder exists and that `FILES_UID` and `FILES_GID` have access.
 
