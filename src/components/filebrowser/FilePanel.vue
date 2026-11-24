@@ -382,7 +382,7 @@ export default {
 			currentItem: null,
 			rootPath: '/DATA',
 			fileRootReady: false,
-			mountPoints: ['/DATA'],
+			mountPoints: [],
 			// the folders given to an account and the ones it may write (CasaOS#168); null for the owner
 			accountFolders: null,
 			currentPath: '',
@@ -666,7 +666,7 @@ export default {
 				this.accountFolders = accountFoldersFrom(data)
 				this.rootPath = this.accountFolders ? (this.accountFolders.folders[0] || '/') : fileRootFrom(data?.roots)
 				if (this.$standaloneFiles) {
-					this.mountPoints = data?.mount_points ?? [this.rootPath]
+					this.mountPoints = data?.mount_points ?? []
 				}
 			} catch {
 				this.rootPath = '/DATA'

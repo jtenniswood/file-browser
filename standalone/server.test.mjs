@@ -41,6 +41,9 @@ it('finds mount points inside the data directory and decodes their names', () =>
 		'104 1 0:5 / /data-other/Outside rw - tmpfs tmpfs rw',
 	].join('\n')
 	assert.deepEqual(mountedPaths(mountInfo, '/data'), ['/DATA/Media Drive', '/DATA/Work', '/DATA/Work/Archive'])
+	assert.deepEqual(mountedPaths(mountInfo, '/data', []), ['/DATA'])
+	assert.deepEqual(mountedPaths(mountInfo, '/data', ['/data/Media Drive', '/data/Documents']), ['/DATA', '/DATA/Media Drive'])
+	assert.deepEqual(mountedPaths('', '/data', []), [])
 })
 
 it('standalone Files serves and updates only the configured data directory', async (t) => {

@@ -10,7 +10,7 @@ RUN install -d -m 0750 /data
 
 FROM node:24-bookworm-slim
 WORKDIR /app
-ENV NODE_ENV=production FILES_HOST=0.0.0.0 FILES_PORT=8080 FILES_DIRECTORY=/data
+ENV NODE_ENV=production FILES_HOST=0.0.0.0 FILES_PORT=8080 FILES_DIRECTORY=/data FILES_MOUNT_POINTS=[]
 COPY --from=build /app/build/file-browser ./build/file-browser
 COPY standalone/server.mjs standalone/storage.mjs standalone/accounts.mjs standalone/totp.mjs standalone/samba.mjs ./standalone/
 COPY src/assets/img/filebrowser/folder-icons.json ./src/assets/img/filebrowser/
