@@ -1,4 +1,5 @@
 import { automaticFolderIcon } from '../automaticFolderIcon.js'
+import { isCustomFolderIcon } from '../folderIcons.js'
 
 const miniFolderIcons = {
 	application: 'display-applications-outline',
@@ -10,6 +11,27 @@ const miniFolderIcons = {
 	root: 'root-outline',
 	usb: 'usb-outline',
 	video: 'media-outline',
+}
+
+const materialFolderIcons = {
+	archive: 'archive-outline',
+	backup: 'backup-restore',
+	books: 'book-open-outline',
+	cloud: 'cloud-outline',
+	code: 'code-tags',
+	favorites: 'star-outline',
+	games: 'gamepad-variant-outline',
+	music: 'music',
+	projects: 'briefcase-outline',
+}
+
+export function pinnedFolderIcon(icon) {
+	if (!isCustomFolderIcon(icon))
+		return
+	if (Object.hasOwn(materialFolderIcons, icon))
+		return { icon: materialFolderIcons[icon], pack: 'mdi' }
+
+	return { icon: miniFolderIcons[icon], pack: 'casa' }
 }
 
 function shortcutIcon(item, entry, isFile) {
