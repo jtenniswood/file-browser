@@ -163,9 +163,22 @@
 
 							<!-- Header End -->
 
-							<p v-if="allListData.length > 0" class="tool-bar is-flex is-align-items-center is-size-14px mb-2 mt-2 is-flex-shrink-0">
-								{{ itemCountLabel }}
-							</p>
+							<!-- Tool Bar Start -->
+							<div v-if="allListData.length > 0" class="tool-bar is-flex mb-2 mt-2 is-flex-shrink-0">
+								<div class="is-flex-grow-1 has-text-left is-flex is-align-items-center">
+									<b-field class="ml-1 is-flex is-size-14px mb-0" expanded>
+										<b-checkbox v-model="isSelectAll" :class="selectState" size="is-small"
+											@update:model-value="handleSelect">
+											{{
+												selectState != "none"
+													? $t("select-items", selectLabel)
+													: $t("total-items", selectLabel)
+											}}
+										</b-checkbox>
+									</b-field>
+								</div>
+							</div>
+							<!-- Tool Bar End -->
 
 							<!-- List View Start -->
 							<div id="dropTarget" class="is-flex-grow-1 is-flex over is-justify-content-center ">
@@ -388,6 +401,9 @@ export default {
 			uploadPercentage: 0,
 			hasPasteData: this.$store.state.operateObject != null,
 			uploaderInstance: {},
+			selectState: 'none',
+			isSelectAll: false,
+			selectLabel: {},
 			isToolbarShow: false,
 			isEmpty: true,
 			errorMsg: '',
@@ -442,12 +458,6 @@ export default {
 	},
 
 	computed: {
-		itemCountLabel() {
-			const selectedCount = this.selectedArray.length
-			return selectedCount > 0
-				? this.$t('select-items', { num: selectedCount })
-				: this.$t('total-items', { num: this.listData.length })
-		},
 		// an account given folders, not the owner: Files shows its folders only
 		isAccount() {
 			return this.accountFolders !== null
@@ -489,6 +499,7 @@ export default {
 		showHiddenFiles() {
 			this.clearSelection()
 			this.updateVisibleList()
+			this.handelListChange(this.listData)
 		},
 		'$store.state.access_token': {
 			handler(val) {
@@ -782,6 +793,8 @@ export default {
 				item.isSelected = false
 			})
 			this.selectedArray = []
+			this.selectState = 'none'
+			this.isSelectAll = false
 			this.isToolbarShow = false
 			if (this.$refs.listview) {
 				this.$refs.listview.selectList = []
@@ -796,9 +809,54 @@ export default {
 			this.$store.commit('SET_SHOW_HIDDEN_FILES', !this.showHiddenFiles)
 		},
 
+		/**
+		 * @description: Handle Select All Action
+		 * @param {*} bool
+		 * @return {*}
+		 */
+		handleSelect(bool) {
+			if (bool) {
+				this.listData.forEach((item, index) => {
+					item.isSelected = true
+					this.$refs.listview.selectList.push(index)
+				})
+			} else {
+				this.listData.forEach((item) => {
+					item.isSelected = false
+				})
+				this.$refs.listview.selectList = []
+			}
+			this.handelListChange(this.listData)
+		},
+
+		/**
+		 * @description: Handle List data change (Selected State)
+		 * @param {*} list
+		 * @return {*}
+		 */
 		handelListChange(list) {
-			this.selectedArray = list.filter(item => item.isSelected)
-			this.isToolbarShow = this.selectedArray.length > 0
+			this.selectedArray = list.filter((item) => {
+				return item.isSelected
+			})
+			if (this.selectedArray.length == list.length && list.length > 0) {
+				this.selectState = 'all'
+				this.isSelectAll = true
+				this.selectLabel = { num: list.length }
+				this.isToolbarShow = true
+			} else if (
+				this.selectedArray.length < list.length
+				&& this.selectedArray.length > 0
+			) {
+				this.selectState = 'part'
+				this.isSelectAll = false
+				this.selectLabel = { num: this.selectedArray.length }
+				this.isToolbarShow = true
+			} else {
+				this.selectState = 'none'
+				this.isSelectAll = false
+				this.selectLabel = { num: list.length }
+				this.isToolbarShow = false
+			}
 		},
 
 		/**
@@ -1153,7 +1211,8 @@ export default {
 		 * @return {*}
 		 */
 		handleClose() {
-			this.clearSelection()
+			this.isSelectAll = false
+			this.handleSelect(this.isSelectAll)
 		},
 
 		/**
