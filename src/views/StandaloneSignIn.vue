@@ -1,10 +1,11 @@
 <template>
 	<main class="files-account-page files-account-center">
-		<section class="files-account-card files-account-form" aria-labelledby="files-sign-in-title">
-			<p class="has-text-weight-semibold mb-2">Files</p>
-			<h1 id="files-sign-in-title" class="title is-4 mb-3">{{ title }}</h1>
-			<p v-if="needsSetup" class="mb-5">This account can manage users and access the Files folder.</p>
-			<p v-else-if="requiresCode" class="mb-5">Enter a code from your authenticator app or use one of your recovery codes.</p>
+		<section class="files-account-card files-account-form" :aria-label="title">
+			<template v-if="needsSetup">
+				<p class="has-text-weight-semibold mb-2">Files</p>
+				<h1 class="title is-4 mb-3">{{ title }}</h1>
+				<p class="mb-5">This account can manage users and access the Files folder.</p>
+			</template>
 			<form @submit.prevent="submit">
 				<div v-show="!requiresCode" class="field">
 					<label class="label" for="files-user">Username</label>
