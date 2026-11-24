@@ -30,7 +30,7 @@
     "@vue-office/pdf": "^1.6.0",
     "@vueuse/components": "^10.2.1",
     "@vueuse/core": "^10.2.1",
-    "apexcharts": "4.1.0",
+    "apexcharts": "4.7.0",
     "artplayer": "^5.4.0",
     "axios": "^0.34.0",
     "buefy": "3.1.0",
