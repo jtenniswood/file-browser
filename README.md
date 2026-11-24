@@ -14,7 +14,7 @@ test -f .env || printf 'FILES_UID=%s\nFILES_GID=%s\n' "$(id -u)" "$(id -g)" > .e
 docker compose up -d --wait
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host. File Browser opens without a sign-in and shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on the Docker host. File Browser shows the `files-data` folder as **DATA**. Files you put there on the host appear in the app, and files you upload or edit in the app are saved there.
 
 The Compose file pulls `ghcr.io/jtenniswood/files:latest` from GitHub Container Registry. [View available image tags](https://github.com/jtenniswood/files/pkgs/container/files).
 
@@ -37,9 +37,7 @@ The supplied Compose file publishes the port on the Docker host’s loopback add
 
 ## Update, stop, or back up
 
-If your current version asks for a password, update `compose.yaml` to the current version before pulling the new image. Keep your existing data folder and other settings. You can remove the old File Browser username and password settings from `.env`. If you already use a reverse proxy, configure its access controls and `FILES_PUBLIC_ORIGIN` before updating.
-
-Update the installed image from the same directory as `compose.yaml` and `.env`.
+Use the current `compose.yaml` with your existing data folder and `.env` settings. If you use a reverse proxy, make sure `FILES_PUBLIC_ORIGIN` is set to its HTTPS address. Run these commands from the directory containing `compose.yaml` and `.env`.
 
 ```sh
 docker compose pull
