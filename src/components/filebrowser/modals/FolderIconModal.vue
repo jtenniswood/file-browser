@@ -4,8 +4,7 @@
 			<h3 class="title is-header mb-0">{{ $t('Change folder icon') }}</h3>
 		</header>
 		<section class="modal-card-body">
-			<fieldset :disabled="saving">
-				<legend class="has-text-weight-semibold mb-3">{{ item.name }}</legend>
+			<fieldset :aria-label="item.name" :disabled="saving">
 				<div class="folder-icon-options">
 					<label v-for="option in options" :key="option.id">
 						<input v-model="selected" class="is-sr-only" type="radio" name="folder-icon" :value="option.id">
@@ -84,8 +83,9 @@ export default {
 	width: min(32rem, calc(100vw - 2rem));
 }
 
-.folder-icon-picker legend {
-	overflow-wrap: anywhere;
+.folder-icon-picker .modal-card-head {
+	border-bottom: 1px solid var(--casa-divider);
+	box-shadow: none;
 }
 
 .folder-icon-options {
@@ -105,8 +105,6 @@ export default {
 	gap: 0.25rem;
 	height: 100%;
 	padding: 0.5rem 0.25rem;
-	border: 1px solid var(--bulma-border);
-	border-radius: 0.5rem;
 	cursor: pointer;
 	font-size: 0.875rem;
 	line-height: 1.25;
@@ -116,12 +114,12 @@ export default {
 
 .folder-icon-option:hover,
 input:checked + .folder-icon-option {
-	background: var(--bulma-scheme-main-bis);
+	color: var(--bulma-link-text);
 }
 
 input:checked + .folder-icon-option {
-	border-color: var(--bulma-primary);
-	box-shadow: inset 0 0 0 1px var(--bulma-primary);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
 }
 
 input:focus-visible + .folder-icon-option {
