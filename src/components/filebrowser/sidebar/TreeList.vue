@@ -10,7 +10,7 @@
 				@keydown.shift.f10="openPinMenu($event, item)" />
 		</template>
 	</draggable>
-	<div ref="pinMenu" class="file-dropdown pin-menu" popover="auto">
+	<div ref="pinMenu" class="dropdown file-dropdown pin-menu" popover="auto">
 		<div class="dropdown-menu">
 			<div class="dropdown-content" role="menu" :aria-label="$t('Pinned')">
 				<button role="menuitem" type="button" class="dropdown-item" :disabled="unpinPending" autofocus @click="unpin">
@@ -213,6 +213,7 @@ export default {
 	padding: 0;
 	border: 0;
 	background: transparent;
+	font-size: 1rem;
 	overflow: visible;
 
 	&:popover-open {
