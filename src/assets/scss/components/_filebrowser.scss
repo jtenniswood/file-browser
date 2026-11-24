@@ -686,13 +686,6 @@
         border: 2px solid #2276f3 !important;
     }
 
-    .part {
-        input[type=checkbox]+.check {
-            border: 2px solid #2276f3 !important;
-            background: #2276f3 url("data:image/svg+xml;utf8,%3C?xml version='1.0' encoding='UTF-8'?%3E%3C!DOCTYPE svg PUBLIC '-//W3C//DTD SVG 1.1//EN' 'http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd'%3E%3Csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' version='1.1' width='15' height='15' viewBox='0 0 24 24'%3E %3Cpath fill='%23ffffff' d='M19,13H5V11H19V13Z' /%3E%3C/svg%3E") no-repeat center center !important;
-        }
-    }
-
     .node-list {
         width: 100%;
 
