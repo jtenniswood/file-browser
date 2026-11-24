@@ -129,6 +129,7 @@ it('explains permission failures when creating or moving a folder', { skip: proc
 	const dataDirectory = join(directory, 'data')
 	const destination = join(dataDirectory, 'Syncthing')
 	await mkdir(assetsDirectory)
+	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
 	await mkdir(join(dataDirectory, 'New folder'), { recursive: true })
 	await mkdir(destination, { mode: 0o555 })
 	t.onTestFinished(async () => {
