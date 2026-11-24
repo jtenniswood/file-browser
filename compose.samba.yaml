@@ -1,0 +1,11 @@
+services:
+  files:
+    environment:
+      FILES_SAMBA_SOCKET: /run/files-samba/shares.sock
+    volumes:
+      - type: bind
+        source: /run/files-samba
+        target: /run/files-samba
+        read_only: true
+        bind:
+          create_host_path: false

@@ -10,6 +10,7 @@ import process from 'node:process'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { openAccounts } from './accounts.mjs'
+import { readSambaSocket, sambaInventory } from './samba.mjs'
 import { RequestError, openStorage, rootPath } from './storage.mjs'
 
 const assetTypes = {
@@ -213,6 +214,7 @@ export async function createFilesServer({
 	publicOrigin,
 	setupCode,
 	onSetupCode,
+	readSambaShares,
 	maxUploadBytes = 10 * 1024 ** 3,
 }) {
 	const directHost = directAddress && ipHostname(directAddress)
@@ -266,6 +268,14 @@ export async function createFilesServer({
 					break
 				case 'GET /v1/folder':
 					data = await store.list(path)
+					if (readSambaShares && data.content.some(item => item.is_dir)) {
+						const shares = await readSambaShares().catch(() => [])
+						const sharedPaths = new Set(shares.map(suffix => `${rootPath}/${suffix}`))
+						for (const item of data.content) {
+							if (item.is_dir && sharedPaths.has(item.path))
+								item.extensions = { ...item.extensions, samba_shared: true }
+						}
+					}
 					break
 				case 'POST /v1/file':
 				case 'POST /v1/folder':
@@ -356,9 +366,16 @@ async function start() {
 		throw new Error('FILES_PORT must be between 1 and 65535.')
 	const directAddress = env.FILES_BIND_ADDRESS || (ipHostname(host) ? host : undefined)
 	const setupCode = env.FILES_PUBLIC_ORIGIN || !localHost.test(ipHostname(directAddress)) ? randomBytes(16).toString('hex') : undefined
+	const directory = env.FILES_DIRECTORY || './files-data'
+	let readSambaShares
+	if (env.FILES_SAMBA_SOCKET)
+		readSambaShares = () => readSambaSocket(env.FILES_SAMBA_SOCKET)
+	else if (env.FILES_SAMBA === '1')
+		readSambaShares = sambaInventory(directory, env.FILES_SAMBA_CONFIG)
 	const server = await createFilesServer({
 		assetsDirectory: fileURLToPath(new URL('../build/file-browser', import.meta.url)),
-		directory: env.FILES_DIRECTORY || './files-data',
+		directory,
+		readSambaShares,
 		directAddress,
 		publicOrigin: env.FILES_PUBLIC_ORIGIN,
 		setupCode,
