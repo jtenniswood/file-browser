@@ -1,6 +1,5 @@
 <template>
 	<div id="select-container"
-		:class="containerHeight"
 		class="scroll-container scrollbars-light is-relative w-full"
 		@contextmenu.prevent="openContextMenu"
 		@mousedown.left.prevent="onDragSelectionStart">
@@ -11,11 +10,10 @@
 		</div>
 		<!-- Empty Content Slot End -->
 		<div class="content-components select-parent">
-			<div id="card-container" class="card-container">
+			<div class="card-container">
 				<div v-for="(item, index) in listData"
 					:key="`list-${index}${item.name}`"
 					:data-rel="index"
-					:style="colStyle"
 					class="grid-card rdata selectable">
 					<div class="file-card">
 						<div :data-rel="index" class="file-card-item" @mousedown.stop="">
@@ -82,26 +80,10 @@ export default {
 		ContextMenu,
 		IconContainer,
 	},
-	computed: {
-		containerHeight() {
-			return this.isMobile ? 'mobile-height' : ''
-		},
-	},
-	data() {
-		return {
-			cols: 1,
-			colStyle: {
-				width: '33.3333%',
-			},
-			isGird: true,
-		}
-	},
 	created() {
-		this.CARD_CONTAINER = 'card-container'
 		this.SELECT_BOX = 'selection'
 		this.PARENT_BOX = 'select-container'
 		this.SELECT_ITEM = '.file-card-item'
-		this.CARD_WIDTH = 144
 		this.M_WIDTH = 768
 	},
 }

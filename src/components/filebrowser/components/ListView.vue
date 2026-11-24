@@ -112,10 +112,6 @@ export default {
 	mixins: [mixin, ListViewMixin],
 	data() {
 		return {
-			cols: 1000,
-			colStyle: {
-				width: '',
-			},
 			headerList: [
 				{
 					text: 'File name',

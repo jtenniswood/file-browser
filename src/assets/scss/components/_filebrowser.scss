@@ -667,10 +667,6 @@
         overflow-y: auto;
         overflow-x: hidden;
 
-        &.mobile-height {
-            height: calc(100vh - 8.75rem);
-        }
-
         &.mobile-list-height {
             height: calc(100vh - 11.3125rem);
         }
@@ -748,19 +744,20 @@
         .card-container {
             position: relative;
             width: 100%;
-            display: flex;
-            flex-flow: row wrap;
+            --icon-size: var(--file-icon-size, 96px);
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--icon-size) + 48px)), 1fr));
 
             .grid-card {
                 padding: 0 0.75rem;
-                height: 200px;
+                min-height: calc(var(--icon-size) + 104px);
 
                 .file-card {
                     display: flex;
                     justify-content: center;
 
                     .file-card-item {
-                        width: 7.5rem;
+                        width: min(100%, calc(var(--icon-size) + 24px));
 
                         .node-card-container {
                             .outer-wrapper {
@@ -867,17 +864,26 @@
                                             display: flex;
                                             align-items: center;
                                             justify-content: center;
-                                            width: 116px;
-                                            height: 96px;
+                                            width: min(100%, calc(var(--icon-size) + 20px));
+                                            height: var(--icon-size);
 
-                                            .folder-icon {
-                                                width: 96px;
-                                                height: 96px;
+                                            .folder-icon,
+                                            .files-icon {
+                                                width: var(--icon-size);
+                                                height: var(--icon-size);
+                                                max-width: 100%;
+                                                object-fit: contain;
                                             }
 
                                             .files-icon {
-                                                width: 80px;
-                                                height: 80px;
+                                                width: calc(var(--icon-size) * 5 / 6);
+                                                height: calc(var(--icon-size) * 5 / 6);
+                                            }
+
+                                            .thumb-w,
+                                            .thumb-h {
+                                                max-width: min(100%, calc(var(--icon-size) + 4px));
+                                                max-height: var(--icon-size);
                                             }
                                         }
 

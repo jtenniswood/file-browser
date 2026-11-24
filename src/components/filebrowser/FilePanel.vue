@@ -89,7 +89,7 @@
 				<!-- Main Content Start -->
 				<template v-if="pageType == `file`">
 					<div class="content is-flex-grow-1">
-						<uploader ref="uploader" :options="options" class="uploader-example">
+						<uploader ref="uploader" :options="options" :style="{ '--file-icon-size': `${iconSize}px` }" class="uploader-example">
 							<uploader-unsupport></uploader-unsupport>
 							<!-- Header Start -->
 							<header :class="{ 'is-flex-wrap-wrap': isMobile }" class="modal-card-head">
@@ -207,6 +207,11 @@
 							</div>
 							<!-- List View End -->
 
+							<footer v-if="$store.state.isViewGird" class="icon-size-footer">
+								<input v-model.number="iconSize" :aria-label="$t('Icon size')" :title="$t('Icon size')"
+									class="icon-size-slider" type="range" min="64" max="256" step="8">
+							</footer>
+
 							<!-- Upload List Start -->
 							<div v-show="showUploadList" class="upload-list">
 								<b-collapse v-model="openUploadList" animation="slide1"
@@ -264,6 +269,7 @@
 </template>
 
 <script>
+import { useLocalStorage } from '@vueuse/core'
 import { defineAsyncComponent } from 'vue'
 import dropRight from 'lodash/dropRight'
 import escape from 'lodash/escape'
@@ -352,6 +358,10 @@ export default {
 		DropPage: defineAsyncComponent(() => import('./drop/DropPage.vue')),
 		DropEntryButton,
 		SidebarMenuButton,
+	},
+	setup() {
+		const iconSize = useLocalStorage('casaos-filebrowser-icon-size', 96)
+		return { iconSize }
 	},
 	data() {
 		return {
@@ -1440,6 +1450,23 @@ export default {
 	background: transparent;
 	border: 0;
 	font: inherit;
+}
+
+.icon-size-footer {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	min-height: 2.5rem;
+	padding: 0 1.5rem;
+	border-top: 1px solid var(--casa-border-subtle);
+}
+
+.icon-size-slider {
+	width: min(100%, 7.5rem);
+	height: 2rem;
+	margin: 0;
+	accent-color: var(--casa-text-secondary);
+	cursor: pointer;
 }
 
 .full-screen {

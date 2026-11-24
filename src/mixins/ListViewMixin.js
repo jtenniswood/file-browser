@@ -1,6 +1,5 @@
 import pull from 'lodash/pull'
 import Hitbox from 'hitbox-js'
-import events from '@/events/events'
 import VueBreakpointMixin from '@/mixins/breakpoint'
 
 export default {
@@ -25,37 +24,13 @@ export default {
 	mounted() {
 		this.selectBox = document.getElementById(this.SELECT_BOX)
 		this.parentBox = document.getElementById(this.PARENT_BOX)
-		window.addEventListener('resize', this.onResize)
-		this.$EventBus.$on(events.AFTER_FILES_ENTER, this.onResize)
 
 		this.hitboxCheck()
 		window.addEventListener('keydown', this.onKeydown)
 		window.addEventListener('keyup', this.onKeyup)
 		window.addEventListener('blur', this.blur)
-		this.$nextTick(() => {
-			this.onResize()
-		})
 	},
 	methods: {
-		/*************************************************
-		 * PART 1  Alignment Method
-		 **************************************************/
-		/**
-		 * @description: Changes the arrangement of the list when the view size changes.
-		 * @return {*}
-		 */
-		onResize() {
-			if (this.isGird) {
-				const cw = document.getElementById(this.CARD_CONTAINER).clientWidth
-				this.cols = Math.floor(cw / this.CARD_WIDTH)
-				this.colStyle.width = `${(100 / this.cols).toString()}%`
-			}
-		},
-
-		/*************************************************
-		 * PART 2  Select and drag selection
-		 **************************************************/
-
 		/**
 		 * @description: Handle Checkbox value change
 		 * @param {boolean} value
@@ -287,7 +262,6 @@ export default {
 		this.parentBox.removeEventListener('scroll', this.onScroll)
 		window.removeEventListener('keydown', this.onKeydown)
 		window.removeEventListener('keyup', this.onKeyup)
-		window.removeEventListener('resize', this.onResize)
 		window.removeEventListener('blur', this.blur)
 	},
 }
