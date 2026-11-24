@@ -1,5 +1,4 @@
 <template>
-	<h4 v-if="$standaloneFiles && sidebarItems.length" class="sidebar-group-title">{{ $t('Pinned') }}</h4>
 	<draggable v-if="!$standaloneFiles || sidebarItems.length" v-model="sidebarItems" :animation="180" :delay="160" :delay-on-touch-only="true"
 		class="ul" ghost-class="sidebar-drag-ghost" item-key="path" @start="closePinMenu">
 		<template #item="{ element: item }">
