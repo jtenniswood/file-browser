@@ -150,8 +150,8 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       swiper:
-        specifier: 14.2.0
-        version: 14.2.0
+        specifier: 14.4.0
+        version: 14.4.0
       three:
         specifier: 0.187.0
         version: 0.187.0
@@ -6703,8 +6703,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  swiper@14.2.0:
-    resolution: {integrity: sha512-GsL4M9Fq7Sg22OyL3SjdNj/0bxTfIxPJJHHW394Li0u5vYtExi0a09iBUc8CuLafJi5pAlH2AHUe1PocxHl45g==}
+  swiper@14.4.0:
+    resolution: {integrity: sha512-6axnAuBsttFJe0gwsM5tT203/Bts0vcI+FwIX6dqFE4pUFVW6qrdRprNFQVxOYMW7V0S6A/KIqJ6JaPpNN2MCw==}
     engines: {node: '>= 4.7.0'}
 
   symbol-tree@3.2.4:
@@ -14597,7 +14597,7 @@ snapshots:
       picocolors: 1.1.1
       sax: 1.6.1
 
-  swiper@14.2.0: {}
+  swiper@14.4.0: {}
 
   symbol-tree@3.2.4:
     optional: true

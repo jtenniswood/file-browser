@@ -63,7 +63,7 @@
     "qs": "^6.16.1",
     "simple-uploader.js": "^0.6.0",
     "socket.io-client": "^2.5.0",
-    "swiper": "14.2.0",
+    "swiper": "14.4.0",
     "three": "0.187.0",
     "v-viewer": "^3.0.23",
     "vee-validate": "^4.15.1",
