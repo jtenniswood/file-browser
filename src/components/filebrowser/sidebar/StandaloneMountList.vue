@@ -6,8 +6,7 @@
 			<template #item="{ element: item, index }">
 				<tree-list-item :is-active="isActive" :item="item" class="mount-point" role="link" tabindex="0"
 					aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown" :title="$t('Drag to reorder, or use Alt + Up or Down')"
-					@keydown.alt.up.prevent="move(index, -1)" @keydown.alt.down.prevent="move(index, 1)"
-					@keydown.enter.prevent="filePanel.getFileList(item.path)" />
+					@keydown.alt.up.prevent="move(index, -1)" @keydown.alt.down.prevent="move(index, 1)" />
 			</template>
 		</draggable>
 	</section>
@@ -22,7 +21,6 @@ const mountOrderKey = 'casaos-files-mount-order'
 
 export default {
 	components: { Draggable, TreeListItem },
-	inject: ['filePanel'],
 	props: {
 		paths: { type: Array, required: true },
 		isActive: Boolean,
@@ -73,12 +71,6 @@ export default {
 
 .mount-point :deep(.list-item) {
 	cursor: grab;
-}
-
-.mount-point:focus-visible {
-	outline: 2px solid currentColor;
-	outline-offset: -2px;
-	border-radius: 4px;
 }
 
 .sidebar-drag-ghost {
