@@ -228,7 +228,8 @@ export default {
 		padding: 0;
 	}
 
-	.dropdown-item:focus-visible {
+	.dropdown-item:focus {
+		outline: 2px solid currentColor;
 		outline-offset: -2px;
 	}
 }
