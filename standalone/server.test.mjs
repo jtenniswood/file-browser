@@ -76,14 +76,21 @@ it('standalone Files serves and updates only the configured data directory', asy
 	assert.deepEqual((await list()).map(item => item.name), ['Docs'])
 })
 
-it.for([undefined, 'https://files.example.test'])('checks request hosts and origins (public origin: %s)', async (publicOrigin, t) => {
+const networkAddress = '192.168.1.50'
+const proxyHost = 'files.example.test'
+
+it.for([
+	{ mode: 'local' },
+	{ mode: 'direct', directAddress: networkAddress },
+	{ mode: 'proxy', publicOrigin: `https://${proxyHost}` },
+])('checks request hosts and origins ($mode)', async ({ directAddress, publicOrigin }, t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'recasaos-files-local-'))
 	t.onTestFinished(() => rm(directory, { recursive: true, force: true }))
 	const assetsDirectory = join(directory, 'assets')
 	const dataDirectory = join(directory, 'data')
 	await mkdir(assetsDirectory)
 	await writeFile(join(assetsDirectory, 'index.html'), '<title>Files</title>')
-	const server = await createFilesServer({ assetsDirectory, directory: dataDirectory, publicOrigin })
+	const server = await createFilesServer({ assetsDirectory, directory: dataDirectory, directAddress, publicOrigin })
 	t.onTestFinished(() => server.close())
 	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 	const origin = `http://127.0.0.1:${server.address().port}`
@@ -99,7 +106,16 @@ it.for([undefined, 'https://files.example.test'])('checks request hosts and orig
 		request.end(body)
 	})
 	assert.equal(await requestStatus(route, { headers: { host: 'untrusted.test' } }), 403)
-	const proxyHost = 'files.example.test'
+	const directHost = `${networkAddress}:8080`
+	assert.equal(await requestStatus(route, { headers: { host: directHost } }), directAddress ? 200 : 403)
+	assert.equal(await requestStatus('/v1/file', {
+		method: 'POST',
+		headers: { host: directHost, origin: `http://${directHost}` },
+	}, JSON.stringify({ path: '/DATA/direct.txt' })), directAddress ? 200 : 403)
+	assert.equal(await requestStatus('/v1/file', {
+		method: 'POST',
+		headers: { host: directHost, origin: `http://${networkAddress}:8000` },
+	}, JSON.stringify({ path: '/DATA/refused-direct.txt' })), 403)
 	assert.equal(await requestStatus(route, { headers: { host: proxyHost } }), publicOrigin ? 200 : 403)
 	const navigationHeaders = { 'host': proxyHost, 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'document' }
 	assert.equal(await requestStatus('/', { headers: navigationHeaders }), publicOrigin ? 200 : 403)

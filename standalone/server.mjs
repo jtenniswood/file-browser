@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { isIP } from 'node:net'
 import { basename, extname, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { pipeline } from 'node:stream/promises'
@@ -78,11 +79,20 @@ async function bodyOf(request) {
 	}
 }
 
-function isAllowedRequest(request, pathname, publicOrigin) {
+function ipHostname(address) {
+	const family = isIP(address)
+	if (!family || address.includes('%'))
+		return ''
+	const { hostname } = new URL(`http://${family === 6 ? `[${address}]` : address}`)
+	return hostname === '0.0.0.0' || hostname === '[::]' ? '' : hostname
+}
+
+function isAllowedRequest(request, pathname, directHost, publicOrigin) {
 	const { host, origin, 'sec-fetch-site': site, 'sec-fetch-dest': destination } = request.headers
 	const authority = host?.toLowerCase() || ''
 	const usesPublicOrigin = authority === publicOrigin?.host
-	if (!usesPublicOrigin && !localHost.test(authority))
+	const usesDirectHost = directHost && authority.replace(/:\d{1,5}$/, '') === directHost
+	if (!usesPublicOrigin && !usesDirectHost && !localHost.test(authority))
 		return false
 	// A link or an authentication proxy can navigate to the app's entry page.
 	if (destination === 'document' && request.method === 'GET' && pathname === '/')
@@ -197,9 +207,13 @@ function positiveInteger(value, label, fallback) {
 export async function createFilesServer({
 	assetsDirectory,
 	directory,
+	directAddress,
 	publicOrigin,
 	maxUploadBytes = 10 * 1024 ** 3,
 }) {
+	const directHost = directAddress && ipHostname(directAddress)
+	if (directAddress && !directHost)
+		throw new Error('Set FILES_BIND_ADDRESS to a specific IP address.')
 	const publicUrl = publicOrigin && new URL(publicOrigin)
 	if (publicUrl && (publicUrl.protocol !== 'https:' || publicUrl.href !== `${publicUrl.origin}/`))
 		throw new Error('Set FILES_PUBLIC_ORIGIN to an HTTPS origin such as https://files.example.com.')
@@ -221,7 +235,7 @@ export async function createFilesServer({
 			if (method === 'GET' && pathname === '/healthz')
 				return json(response, 200, 'ok')
 
-			if (!isAllowedRequest(request, pathname, publicUrl))
+			if (!isAllowedRequest(request, pathname, directHost, publicUrl))
 				throw new RequestError(403, 'Open the configured Files address directly.')
 
 			const path = searchParams.get('path')
@@ -324,13 +338,14 @@ export async function createFilesServer({
 
 async function start() {
 	const env = process.env
-	const host = env.FILES_HOST || '127.0.0.1'
+	const host = env.FILES_HOST || env.FILES_BIND_ADDRESS || '127.0.0.1'
 	const port = positiveInteger(env.FILES_PORT, 'FILES_PORT', 8080)
 	if (port > 65535)
 		throw new Error('FILES_PORT must be between 1 and 65535.')
 	const server = await createFilesServer({
 		assetsDirectory: fileURLToPath(new URL('../build/file-browser', import.meta.url)),
 		directory: env.FILES_DIRECTORY || './files-data',
+		directAddress: env.FILES_BIND_ADDRESS || (ipHostname(host) ? host : undefined),
 		publicOrigin: env.FILES_PUBLIC_ORIGIN,
 		maxUploadBytes: positiveInteger(env.FILES_MAX_UPLOAD_BYTES, 'FILES_MAX_UPLOAD_BYTES', 10 * 1024 ** 3),
 	})

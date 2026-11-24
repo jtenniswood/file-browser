@@ -20,17 +20,19 @@ jobs:
           persist-credentials: false
       - name: Build the container
         run: docker build --tag file-browser:test .
-      - name: Check local file access
+      - name: Check direct file access with Docker Compose
         shell: bash
         run: |
-          docker run -d --name file-browser-test \
-            --publish 127.0.0.1:18080:8080 file-browser:test
-          trap 'docker logs file-browser-test; docker rm -f file-browser-test' EXIT
-          url=http://127.0.0.1:18080
-          curl -fsS --retry 15 --retry-all-errors --retry-delay 1 "$url/healthz"
+          export FILES_IMAGE=file-browser:test FILES_BIND_ADDRESS=127.0.0.2 FILES_PUBLISH_PORT=18080
+          export FILES_UID="$(id -u)" FILES_GID="$(id -g)"
+          FILES_DIRECTORY=$(mktemp -d)
+          export FILES_DIRECTORY
+          trap 'docker compose logs; docker compose down; rm -rf "$FILES_DIRECTORY"' EXIT
+          docker compose up -d --pull never --wait --wait-timeout 45
+          url="http://$FILES_BIND_ADDRESS:$FILES_PUBLISH_PORT"
           curl -fsS "$url/" -o /dev/null
           test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Host: untrusted.test' "$url/")" = 403
-          curl -fsS --header 'Content-Type: application/json' \
+          curl -fsS --header "Origin: $url" --header 'Content-Type: application/json' \
             --data '{"path":"/DATA/smoke"}' "$url/v1/folder"
           curl -fsS "$url/v1/folder?path=/DATA" | jq -e '.data.content[] | select(.name == "smoke")'
 

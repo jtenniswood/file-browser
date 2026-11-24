@@ -26,14 +26,19 @@ Set these options in `.env` beside `compose.yaml`, then run `docker compose up -
 | --- | --- | --- |
 | `FILES_DIRECTORY` | Host folder to manage. Use an existing absolute path to select a different folder. | `./files-data` |
 | `FILES_PUBLISH_PORT` | Port on the Docker host. | `8080` |
-| `FILES_PUBLIC_ORIGIN` | HTTPS address used by a reverse proxy, such as `https://files.example.com`. | Local addresses only |
+| `FILES_BIND_ADDRESS` | IP address on the Docker host where File Browser is available. | `127.0.0.1` |
+| `FILES_PUBLIC_ORIGIN` | Optional HTTPS address for a reverse proxy, such as `https://files.example.com`. | Unset |
 | `FILES_UID`, `FILES_GID` | Numeric user and group the container runs as. The install commands set them to your user and group. | `1000` |
 | `FILES_MAX_UPLOAD_BYTES` | Maximum upload size per file. | `10737418240` (10 GiB) |
 | `FILES_IMAGE` | Image tag to run. Set it to a `sha-…` tag to pin a specific build. | `ghcr.io/jtenniswood/files:latest` |
 
 The container user needs permission to read and write the host folder. If the service fails to start, run `docker compose logs files` and check that the folder exists and that `FILES_UID` and `FILES_GID` have access.
 
-The supplied Compose file publishes the port on the Docker host’s loopback address. For access from other devices, keep that binding and use an HTTPS reverse proxy that controls who can access File Browser. Set `FILES_PUBLIC_ORIGIN` to the proxy’s HTTPS address, preserve the original `Host` header, and set the proxy’s upload size limit and timeouts for the files you expect. Anyone who can reach File Browser directly has full access to the configured folder.
+## Connect from another device
+
+Set `FILES_BIND_ADDRESS` in `.env` to the Docker host’s local network IP address, for example `192.168.1.50`. Run `docker compose up -d --wait`, then open `http://192.168.1.50:8080` from another device on the same network. Use your own IP address and the port you configured. Anyone who can reach that address has full access to the configured folder, so use it on a trusted network.
+
+If you choose to use an HTTPS reverse proxy, set `FILES_PUBLIC_ORIGIN` to its HTTPS address and preserve the original `Host` header. Set the proxy’s upload size limit and timeouts for the files you expect.
 
 ## Update, stop, or back up
 
