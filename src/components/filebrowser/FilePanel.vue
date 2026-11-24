@@ -95,7 +95,7 @@
 						<uploader ref="uploader" :options="options" :style="{ '--file-icon-size': `${iconSize}px` }" class="uploader-example">
 							<uploader-unsupport></uploader-unsupport>
 							<!-- Header Start -->
-							<header :class="{ 'is-flex-wrap-wrap': isMobile }" class="modal-card-head">
+							<header :class="{ 'is-flex-wrap-wrap': isMobile }" class="modal-card-head files-folder-header">
 								<div id="bread-container" class="is-flex-grow-1 is-flex breadcrumb-container">
 									<!-- SideBar Button Start -->
 									<sidebar-menu-button></sidebar-menu-button>
