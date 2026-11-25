@@ -91,7 +91,7 @@
     "@babel/preset-env": "7.29.14",
     "@babel/preset-typescript": "^7.22.5",
     "@trivago/prettier-plugin-sort-imports": "^6.0.0",
-    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitejs/plugin-vue": "^6.0.0",
     "@vue/cli-plugin-babel": "5.0.9",
     "@vue/cli-plugin-eslint": "5.0.9",
     "@vue/cli-plugin-router": "5.0.9",
