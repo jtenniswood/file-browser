@@ -27,7 +27,7 @@
     "@vee-validate/rules": "^4.15.1",
     "@vue-office/docx": "^1.6.0",
     "@vue-office/excel": "^1.6.0",
-    "@vue-office/pdf": "^1.6.0",
+    "@vue-office/pdf": "^2.0.0",
     "@vueuse/components": "^10.2.1",
     "@vueuse/core": "^10.2.1",
     "ag-psd": "34.2.3",
