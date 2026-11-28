@@ -31,7 +31,7 @@
     "@vueuse/components": "^10.2.1",
     "@vueuse/core": "^10.2.1",
     "ag-psd": "34.2.3",
-    "apexcharts": "4.7.0",
+    "apexcharts": "8.9.2",
     "artplayer": "^5.4.0",
     "axios": "^0.35.0",
     "buefy": "3.1.0",
